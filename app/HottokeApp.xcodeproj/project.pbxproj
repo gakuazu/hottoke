@@ -1,0 +1,521 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		034EE3673DAEB4711B5B07BA /* KaleidoscopeParameters.swift in Sources */ = {isa = PBXBuildFile; fileRef = F104140FCD56ACEE96CBBF65 /* KaleidoscopeParameters.swift */; };
+		0F58BE6220A48DC8C465532D /* KaleidoscopeVideoExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F9A4078225EBCF8BBD539A3 /* KaleidoscopeVideoExporter.swift */; };
+		0F8FD169264FD01FC874054B /* SeededGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF86689186C6913CF05B786 /* SeededGenerator.swift */; };
+		143C487817303E843191F386 /* DailyActivityData.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B4B672EBB17A9EE9C7A23F /* DailyActivityData.swift */; };
+		1484809CF3DF25DF724EAD3C /* KaleidoscopeShapeGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CBA2BDC4AF819F6ED8BF142 /* KaleidoscopeShapeGenerator.swift */; };
+		15C9B8D250A22A253149B4F4 /* HottokeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25481EBBC1B9F25DC4AADDBA /* HottokeApp.swift */; };
+		203659F09B8187B067AC1C15 /* KaleidoscopePalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 07D8FC6C203F5E542B3D7C10 /* KaleidoscopePalette.swift */; };
+		2925F86BF58B2824F09F87A5 /* PhotoLibrarySaver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 588C2E0E9873223419F76C84 /* PhotoLibrarySaver.swift */; };
+		34CDCEF65A478C5FF4220CAD /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90AD8A2DAFB533C4C4C440EF /* RootTabView.swift */; };
+		49B2D3F78A6C8654BECDDEBF /* GlassShard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58A98E674A301DE5E3DC44D4 /* GlassShard.swift */; };
+		685338E60C8C99E257F76327 /* TodayPatternStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146C08485138A55C08971E68 /* TodayPatternStore.swift */; };
+		6977DEAF0A5C68729336B5E7 /* ActivityDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DB0F57EF8D6CF642042DFE0 /* ActivityDataService.swift */; };
+		71818EDF9E18A51E20E94AF7 /* KaleidoscopeTimeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454E3E490F13B82A5BA26920 /* KaleidoscopeTimeline.swift */; };
+		721D7FFA202324B9B8375C0B /* TimeOfDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75A9F5C9C868F92730497A1A /* TimeOfDay.swift */; };
+		8057CEED4BDEE521B444BA03 /* KaleidoscopeLogicTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */; };
+		AA811FF3672F31DE9D3C867A /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3612CECAD3713242D5C513E /* TodayView.swift */; };
+		AB35FCBBBFAABF28D3FD2AA8 /* MotionInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A5938A07E80761EBF73C65 /* MotionInputService.swift */; };
+		D314E9D4FF2970794518AB78 /* KaleidoscopeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E95B3AB0EFEC6B9A19E4AE5D /* KaleidoscopeRenderer.swift */; };
+		EAACCC444A4B024DD349E524 /* KaleidoscopeCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58B9BCEED254167D155693B4 /* KaleidoscopeCanvasView.swift */; };
+		EBF98289185B82133A47DADE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */; };
+		ECEAFB9434A38B13A0F0D7C2 /* ManualModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */; };
+		EFEC64F14FDA0497CD9DDF59 /* ActivityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A5E2F13C7DBF63B34FD33390 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 428C8E2B09E0AE00A226B35B /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BF5C8C4F34CB03F66E7A95B2;
+			remoteInfo = HottokeApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		07D8FC6C203F5E542B3D7C10 /* KaleidoscopePalette.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopePalette.swift; sourceTree = "<group>"; };
+		0DB0F57EF8D6CF642042DFE0 /* ActivityDataService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityDataService.swift; sourceTree = "<group>"; };
+		146C08485138A55C08971E68 /* TodayPatternStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayPatternStore.swift; sourceTree = "<group>"; };
+		17AF89D775FEE4E2BBD749D4 /* HottokeApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = HottokeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1EF86689186C6913CF05B786 /* SeededGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeededGenerator.swift; sourceTree = "<group>"; };
+		25481EBBC1B9F25DC4AADDBA /* HottokeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HottokeApp.swift; sourceTree = "<group>"; };
+		2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeLogicTests.swift; sourceTree = "<group>"; };
+		454E3E490F13B82A5BA26920 /* KaleidoscopeTimeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeTimeline.swift; sourceTree = "<group>"; };
+		5729294C1B12BB9B8A0C43FC /* HottokeAppTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = HottokeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		588C2E0E9873223419F76C84 /* PhotoLibrarySaver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibrarySaver.swift; sourceTree = "<group>"; };
+		58A98E674A301DE5E3DC44D4 /* GlassShard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassShard.swift; sourceTree = "<group>"; };
+		58B9BCEED254167D155693B4 /* KaleidoscopeCanvasView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeCanvasView.swift; sourceTree = "<group>"; };
+		6CBA2BDC4AF819F6ED8BF142 /* KaleidoscopeShapeGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeShapeGenerator.swift; sourceTree = "<group>"; };
+		74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		75A9F5C9C868F92730497A1A /* TimeOfDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeOfDay.swift; sourceTree = "<group>"; };
+		90AD8A2DAFB533C4C4C440EF /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		9F9A4078225EBCF8BBD539A3 /* KaleidoscopeVideoExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeVideoExporter.swift; sourceTree = "<group>"; };
+		DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityKind.swift; sourceTree = "<group>"; };
+		DCB3FDEDAA6B6156232BF1AB /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E1B4B672EBB17A9EE9C7A23F /* DailyActivityData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyActivityData.swift; sourceTree = "<group>"; };
+		E3612CECAD3713242D5C513E /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		E95B3AB0EFEC6B9A19E4AE5D /* KaleidoscopeRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeRenderer.swift; sourceTree = "<group>"; };
+		EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualModeView.swift; sourceTree = "<group>"; };
+		F104140FCD56ACEE96CBBF65 /* KaleidoscopeParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeParameters.swift; sourceTree = "<group>"; };
+		F1A5938A07E80761EBF73C65 /* MotionInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionInputService.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		15E4125BA307870612B1639D /* HottokeApp */ = {
+			isa = PBXGroup;
+			children = (
+				8FA095993ECBA8DD1AB50DB1 /* App */,
+				B1791874F6FC1762A1275743 /* Models */,
+				C1202052B14154075D4DC637 /* Rendering */,
+				32E4E79799FE058216F2334B /* Resources */,
+				C2FD749825D3D47EB56DE19A /* Services */,
+				42109D847158A191BF8C1DBD /* Views */,
+			);
+			path = HottokeApp;
+			sourceTree = "<group>";
+		};
+		32E4E79799FE058216F2334B /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				DCB3FDEDAA6B6156232BF1AB /* Info.plist */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		42109D847158A191BF8C1DBD /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */,
+				90AD8A2DAFB533C4C4C440EF /* RootTabView.swift */,
+				74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */,
+				E3612CECAD3713242D5C513E /* TodayView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		8FA095993ECBA8DD1AB50DB1 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				25481EBBC1B9F25DC4AADDBA /* HottokeApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		9F16B93D62D41B4EBB2FBD0B = {
+			isa = PBXGroup;
+			children = (
+				15E4125BA307870612B1639D /* HottokeApp */,
+				CBC2F7D239C5059FF39FBF19 /* HottokeAppTests */,
+				CC730FA18BC14642DA925D85 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B1791874F6FC1762A1275743 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */,
+				E1B4B672EBB17A9EE9C7A23F /* DailyActivityData.swift */,
+				07D8FC6C203F5E542B3D7C10 /* KaleidoscopePalette.swift */,
+				F104140FCD56ACEE96CBBF65 /* KaleidoscopeParameters.swift */,
+				454E3E490F13B82A5BA26920 /* KaleidoscopeTimeline.swift */,
+				75A9F5C9C868F92730497A1A /* TimeOfDay.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C1202052B14154075D4DC637 /* Rendering */ = {
+			isa = PBXGroup;
+			children = (
+				58A98E674A301DE5E3DC44D4 /* GlassShard.swift */,
+				58B9BCEED254167D155693B4 /* KaleidoscopeCanvasView.swift */,
+				E95B3AB0EFEC6B9A19E4AE5D /* KaleidoscopeRenderer.swift */,
+				6CBA2BDC4AF819F6ED8BF142 /* KaleidoscopeShapeGenerator.swift */,
+				1EF86689186C6913CF05B786 /* SeededGenerator.swift */,
+			);
+			path = Rendering;
+			sourceTree = "<group>";
+		};
+		C2FD749825D3D47EB56DE19A /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				0DB0F57EF8D6CF642042DFE0 /* ActivityDataService.swift */,
+				9F9A4078225EBCF8BBD539A3 /* KaleidoscopeVideoExporter.swift */,
+				F1A5938A07E80761EBF73C65 /* MotionInputService.swift */,
+				588C2E0E9873223419F76C84 /* PhotoLibrarySaver.swift */,
+				146C08485138A55C08971E68 /* TodayPatternStore.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		CBC2F7D239C5059FF39FBF19 /* HottokeAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */,
+			);
+			path = HottokeAppTests;
+			sourceTree = "<group>";
+		};
+		CC730FA18BC14642DA925D85 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				17AF89D775FEE4E2BBD749D4 /* HottokeApp.app */,
+				5729294C1B12BB9B8A0C43FC /* HottokeAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		BB31F244DD10EC354099FB2E /* HottokeAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FD70E9EE411EF168596D94AF /* Build configuration list for PBXNativeTarget "HottokeAppTests" */;
+			buildPhases = (
+				4761F18DAFFAC0CC6B1CAC8F /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				5FD86F3CC2EC9369DB8C8F51 /* PBXTargetDependency */,
+			);
+			name = HottokeAppTests;
+			packageProductDependencies = (
+			);
+			productName = HottokeAppTests;
+			productReference = 5729294C1B12BB9B8A0C43FC /* HottokeAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		BF5C8C4F34CB03F66E7A95B2 /* HottokeApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D786044F1ECF26693E18479C /* Build configuration list for PBXNativeTarget "HottokeApp" */;
+			buildPhases = (
+				CF96844155FD8A857A23CFC1 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = HottokeApp;
+			packageProductDependencies = (
+			);
+			productName = HottokeApp;
+			productReference = 17AF89D775FEE4E2BBD749D4 /* HottokeApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		428C8E2B09E0AE00A226B35B /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 89EB11C20C3FCE3BC5DED5E8 /* Build configuration list for PBXProject "HottokeApp" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 9F16B93D62D41B4EBB2FBD0B;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CC730FA18BC14642DA925D85 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BF5C8C4F34CB03F66E7A95B2 /* HottokeApp */,
+				BB31F244DD10EC354099FB2E /* HottokeAppTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		4761F18DAFFAC0CC6B1CAC8F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8057CEED4BDEE521B444BA03 /* KaleidoscopeLogicTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CF96844155FD8A857A23CFC1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6977DEAF0A5C68729336B5E7 /* ActivityDataService.swift in Sources */,
+				EFEC64F14FDA0497CD9DDF59 /* ActivityKind.swift in Sources */,
+				143C487817303E843191F386 /* DailyActivityData.swift in Sources */,
+				49B2D3F78A6C8654BECDDEBF /* GlassShard.swift in Sources */,
+				15C9B8D250A22A253149B4F4 /* HottokeApp.swift in Sources */,
+				EAACCC444A4B024DD349E524 /* KaleidoscopeCanvasView.swift in Sources */,
+				203659F09B8187B067AC1C15 /* KaleidoscopePalette.swift in Sources */,
+				034EE3673DAEB4711B5B07BA /* KaleidoscopeParameters.swift in Sources */,
+				D314E9D4FF2970794518AB78 /* KaleidoscopeRenderer.swift in Sources */,
+				1484809CF3DF25DF724EAD3C /* KaleidoscopeShapeGenerator.swift in Sources */,
+				71818EDF9E18A51E20E94AF7 /* KaleidoscopeTimeline.swift in Sources */,
+				0F58BE6220A48DC8C465532D /* KaleidoscopeVideoExporter.swift in Sources */,
+				ECEAFB9434A38B13A0F0D7C2 /* ManualModeView.swift in Sources */,
+				AB35FCBBBFAABF28D3FD2AA8 /* MotionInputService.swift in Sources */,
+				2925F86BF58B2824F09F87A5 /* PhotoLibrarySaver.swift in Sources */,
+				34CDCEF65A478C5FF4220CAD /* RootTabView.swift in Sources */,
+				0F8FD169264FD01FC874054B /* SeededGenerator.swift in Sources */,
+				EBF98289185B82133A47DADE /* SettingsView.swift in Sources */,
+				721D7FFA202324B9B8375C0B /* TimeOfDay.swift in Sources */,
+				685338E60C8C99E257F76327 /* TodayPatternStore.swift in Sources */,
+				AA811FF3672F31DE9D3C867A /* TodayView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		5FD86F3CC2EC9369DB8C8F51 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = BF5C8C4F34CB03F66E7A95B2 /* HottokeApp */;
+			targetProxy = A5E2F13C7DBF63B34FD33390 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		27A2C0592EBEF39D10DD052A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = HottokeApp/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.app;
+				PRODUCT_NAME = HottokeApp;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		31217DCDC195E055C2C5A106 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.apptests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HottokeApp.app/HottokeApp";
+			};
+			name = Debug;
+		};
+		53A40398DEFC734C6BB254C6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = HottokeApp/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.app;
+				PRODUCT_NAME = HottokeApp;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		71D51B3FABA50FD750455606 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		CAC0D9C1DB67363D30BD694D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		EA6B522BDC015BB5CD9EAFA6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.apptests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HottokeApp.app/HottokeApp";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		89EB11C20C3FCE3BC5DED5E8 /* Build configuration list for PBXProject "HottokeApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				71D51B3FABA50FD750455606 /* Debug */,
+				CAC0D9C1DB67363D30BD694D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D786044F1ECF26693E18479C /* Build configuration list for PBXNativeTarget "HottokeApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				27A2C0592EBEF39D10DD052A /* Debug */,
+				53A40398DEFC734C6BB254C6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FD70E9EE411EF168596D94AF /* Build configuration list for PBXNativeTarget "HottokeAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				31217DCDC195E055C2C5A106 /* Debug */,
+				EA6B522BDC015BB5CD9EAFA6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 428C8E2B09E0AE00A226B35B /* Project object */;
+}

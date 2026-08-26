@@ -1,0 +1,62 @@
+name: HottokeApp
+options:
+  bundleIdPrefix: com.gakuazu.hottoke
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    GENERATE_INFOPLIST_FILE: NO
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+targets:
+  HottokeApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: HottokeApp
+    info:
+      path: HottokeApp/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: カレイド日記
+        NSMotionUsageDescription: "今日の活動データから万華鏡模様の動画を作るために使います。データは端末の外へは一切送信しません。"
+        NSPhotoLibraryAddUsageDescription: "作成した模様の動画をあなたの写真ライブラリに保存するために使います。"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gakuazu.hottoke.app
+        PRODUCT_NAME: HottokeApp
+  HottokeAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: HottokeAppTests
+    dependencies:
+      - target: HottokeApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gakuazu.hottoke.apptests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  HottokeApp:
+    build:
+      targets:
+        HottokeApp: all
+        HottokeAppTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - HottokeAppTests
+    archive:
+      config: Release

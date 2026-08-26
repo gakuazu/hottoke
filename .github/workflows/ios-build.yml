@@ -1,0 +1,106 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show available Xcode versions
+        run: ls /Applications | grep Xcode
+
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Show Xcode & SDK versions
+        run: xcodebuild -version && xcodebuild -showsdks
+
+      - name: Build for iOS Simulator (compile sanity check)
+        run: |
+          xcodebuild build \
+            -project HottokeApp.xcodeproj \
+            -scheme HottokeApp \
+            -destination "generic/platform=iOS Simulator" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Pick an available iPhone simulator
+        id: pick_sim
+        run: |
+          DEVICE=$(xcrun simctl list devices available 2>/dev/null \
+            | grep -E '^[[:space:]]+iPhone' \
+            | head -n 1 \
+            | sed -E 's/^[[:space:]]*(.*) \(.*/\1/')
+          if [ -z "$DEVICE" ]; then
+            DEVICE="iPhone 15"
+          fi
+          echo "Selected simulator device: $DEVICE"
+          echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests on Simulator
+        run: |
+          xcodebuild test \
+            -project HottokeApp.xcodeproj \
+            -scheme HottokeApp \
+            -destination "platform=iOS Simulator,name=${{ steps.pick_sim.outputs.device }}" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build unsigned .app for iOS device (for Sideloadly)
+        run: |
+          xcodebuild build \
+            -project HottokeApp.xcodeproj \
+            -scheme HottokeApp \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package unsigned IPA
+        run: |
+          set -e
+          APP_PATH="build/Build/Products/Release-iphoneos/HottokeApp.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Built .app not found at $APP_PATH"
+            find build/Build/Products -maxdepth 3
+            exit 1
+          fi
+          mkdir -p ipa_root/Payload
+          cp -R "$APP_PATH" ipa_root/Payload/
+          cd ipa_root
+          zip -qr ../HottokeApp-unsigned.ipa Payload
+          cd ..
+          ls -la HottokeApp-unsigned.ipa
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HottokeApp-unsigned-ipa
+          path: app/HottokeApp-unsigned.ipa
+          retention-days: 14
+
+      - name: Upload raw .app artifact (debugging)
+        uses: actions/upload-artifact@v4
+        with:
+          name: HottokeApp-app-bundle
+          path: app/build/Build/Products/Release-iphoneos/HottokeApp.app
+          retention-days: 14
