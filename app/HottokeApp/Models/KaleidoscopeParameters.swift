@@ -11,7 +11,8 @@ struct KaleidoscopeParameters: Equatable {
     var deformationIntensity: Double = 0.4 // 0...1
     var rotationSpeed: Double = 0.15    // 参考値（実際の回転はrotationに事前計算して渡す）
     var shardDensity: Double = 0.6      // 0...1（ガラス片の密度）
-    var noiseAmount: Double = 0.05      // 0...1（将来のゆらぎ表現用に予約、MVPでは未使用）
+    var noiseAmount: Double = 0.05      // 0...1（個々のガラス片の揺らぎの強さの係数。wobbleAmountに乗算）
     var flowOffset: CGVector = .zero    // 手動モードの「振る」操作による一時的な模様全体のズレ
     var radialBurst: Double = 0         // 0...1（階段を上った量に応じた放射状の演出）
+    var time: Double = 0                // 経過秒数。個々のガラス片が独立して呼吸するように揺らぐアニメーションに使う
 }

@@ -22,8 +22,10 @@ enum KaleidoscopeRenderer {
         let center = CGPoint(x: size.width / 2, y: size.height / 2)
         let radius = min(size.width, size.height) / 2
 
-        // 背景: docs/03bの通り、ベタ塗りグラデーションではなく暗い下地のみ。
-        // multiply合成のガラス片が乗ったときに宝石のような発色になる。
+        // 背景: ベタ塗りグラデーションではなく暗い下地のみ（動画書き出しに透過チャンネルの
+        // ないmp4を使うため塗りつぶし自体は必要）。ガラス片は通常合成で描画するため、
+        // この暗い下地の上でも本来の鮮やかな色がそのまま乗る（乗算合成だと黒背景と
+        // 掛け合わさって色が潰れてしまうため使わない。詳細はrenderWedgeBitmap内コメント参照）。
         context.setFillColor(CGColor(red: 0.02, green: 0.02, blue: 0.04, alpha: 1))
         context.fill(CGRect(origin: .zero, size: size))
 
@@ -35,7 +37,7 @@ enum KaleidoscopeRenderer {
         )
 
         // ルール1: 扇形は1回だけオフスクリーンに描画する。
-        guard let wedgeImage = renderWedgeBitmap(pattern: pattern, radius: radius, palette: parameters.palette) else {
+        guard let wedgeImage = renderWedgeBitmap(pattern: pattern, radius: radius, palette: parameters.palette, time: parameters.time, noiseAmount: parameters.noiseAmount) else {
             // 何らかの理由で描画できなくても、描画ループ自体は止めない（docs/03b 安全設計）。
             return
         }
@@ -79,7 +81,7 @@ enum KaleidoscopeRenderer {
 
     // MARK: - 扇形1つ分をオフスクリーンビットマップに描画
 
-    private static func renderWedgeBitmap(pattern: WedgePattern, radius: CGFloat, palette: KaleidoscopePalette) -> CGImage? {
+    private static func renderWedgeBitmap(pattern: WedgePattern, radius: CGFloat, palette: KaleidoscopePalette, time: Double, noiseAmount: Double) -> CGImage? {
         let dimension = max(2, Int(radius.rounded(.up)) * 2)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(
@@ -118,9 +120,19 @@ enum KaleidoscopeRenderer {
             return path
         }
 
+        // 個体ごとの揺らぎの強さ。noiseAmount（アクティビティ種別ごとに変わる係数）で全体スケールを
+        // 調整しつつ、wobbleAmount/wobblePhaseは形状ごとに生成時に1回だけ決まった値を使うため、
+        // 各ガラス片が互いにズレたタイミングで独立して呼吸するように見える。
+        let noiseScale = 1 + CGFloat(noiseAmount) * 4
+        func wobbledRadius(base: CGFloat, phase: CGFloat, amount: CGFloat) -> CGFloat {
+            let wobble = sin(time * 1.7 + Double(phase)) * Double(amount * noiseScale)
+            return base * CGFloat(1 + wobble)
+        }
+
         func drawShard(_ shard: GlassShard, alpha: CGFloat) {
             guard !colors.isEmpty else { return }
-            let p = point(radiusFraction: shard.radius, angle: shard.angle)
+            let effectiveRadius = wobbledRadius(base: shard.radius, phase: shard.wobblePhase, amount: shard.wobbleAmount)
+            let p = point(radiusFraction: effectiveRadius, angle: shard.angle)
             let s = shard.size * radius
             let shapePath = path(for: shard.shape, size: s)
 
@@ -128,9 +140,12 @@ enum KaleidoscopeRenderer {
             ctx.translateBy(x: p.x, y: p.y)
             ctx.rotate(by: shard.rotation)
 
-            // 塗りはmultiply（乗算）合成: 重なった部分は色が掛け合わさって濃くなり、
-            // 重ならない部分は下地が透けて薄く見える（docs/03b「透明感」）。
-            ctx.setBlendMode(.multiply)
+            // multiply（乗算）合成は、docs/03bのブラウザ版のように背景が透明な場合にのみ
+            // 「重なった部分だけ濃くなる」効果になる。このSwift実装では背景に暗い下地を
+            // 塗っているため、multiplyのままだと黒×色でほぼ黒に潰れてしまっていた
+            // （実機で「キラキラしない・色が死んでいる」と指摘された根本原因）。
+            // 通常合成にして、ガラス片本来の鮮やかな色がそのまま乗るようにする。
+            ctx.setBlendMode(.normal)
             let color = colors[shard.colorIndex % colors.count]
             ctx.setFillColor(color.copy(alpha: alpha) ?? color)
             ctx.addPath(shapePath)
@@ -147,8 +162,9 @@ enum KaleidoscopeRenderer {
         }
 
         // レイヤー構成: 面(facet) → シャード(shard) → 光の筋(ray) → 輝き(spark)
-        for facet in pattern.facets { drawShard(facet, alpha: 0.55) }
-        for shard in pattern.shards { drawShard(shard, alpha: 0.75) }
+        // 通常合成に変更したため、透け感を保ちつつくっきり見えるようアルファ値も引き上げる。
+        for facet in pattern.facets { drawShard(facet, alpha: 0.85) }
+        for shard in pattern.shards { drawShard(shard, alpha: 0.9) }
 
         for ray in pattern.rays {
             ctx.saveGState()
@@ -161,14 +177,24 @@ enum KaleidoscopeRenderer {
             ctx.restoreGState()
         }
 
+        // 輝き(spark): 平らな白丸ではなく、白(中心)→パレット色→透明の放射グラデーションで
+        // キラキラした光の粒に見えるようにする。
         for spark in pattern.sparks {
-            let p = point(radiusFraction: spark.radius, angle: spark.angle)
+            guard !colors.isEmpty else { break }
+            let effectiveRadius = wobbledRadius(base: spark.radius, phase: spark.wobblePhase, amount: spark.wobbleAmount)
+            let p = point(radiusFraction: effectiveRadius, angle: spark.angle)
             let s = spark.size * radius
+            let tint = colors[spark.colorIndex % colors.count]
+            guard let tintComponents = tint.components, tintComponents.count >= 3 else { continue }
+            let sparkColors: [CGColor] = [
+                CGColor(red: 1, green: 1, blue: 1, alpha: 0.95),
+                CGColor(red: tintComponents[0], green: tintComponents[1], blue: tintComponents[2], alpha: 0.7),
+                CGColor(red: tintComponents[0], green: tintComponents[1], blue: tintComponents[2], alpha: 0)
+            ]
+            guard let gradient = CGGradient(colorsSpace: colorSpace, colors: sparkColors as CFArray, locations: [0, 0.4, 1]) else { continue }
             ctx.saveGState()
             ctx.setBlendMode(.screen)
-            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.5))
-            ctx.addEllipse(in: CGRect(x: p.x - s / 2, y: p.y - s / 2, width: s, height: s))
-            ctx.fillPath()
+            ctx.drawRadialGradient(gradient, startCenter: p, startRadius: 0, endCenter: p, endRadius: s / 2, options: [])
             ctx.restoreGState()
         }
 

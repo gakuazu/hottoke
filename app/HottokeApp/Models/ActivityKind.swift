@@ -42,7 +42,7 @@ enum ActivityKind: String, CaseIterable, Equatable {
 struct ActivityStyle: Equatable {
     let rotationSpeed: Double          // ラジアン/秒の目安
     let deformationIntensity: Double   // 0...1
-    let noiseAmount: Double            // 0...1（将来のゆらぎ表現用に予約）
+    let noiseAmount: Double            // 0...1（個々のガラス片の揺らぎの強さ。KaleidoscopeRendererのwobble計算で使用）
     let flowBias: CGVector             // automotive(車移動)のスライド流れ方向
     let radialBurstBias: Double        // 将来の拡張用（現状は0固定）
 

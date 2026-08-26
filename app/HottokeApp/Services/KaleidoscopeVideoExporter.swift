@@ -119,7 +119,8 @@ final class KaleidoscopeVideoExporter {
             shardDensity: 0.6,
             noiseAmount: style.noiseAmount,
             flowOffset: CGVector(dx: style.flowBias.dx * 20, dy: style.flowBias.dy * 20),
-            radialBurst: radialBurst
+            radialBurst: radialBurst,
+            time: elapsed
         )
     }
 

@@ -10,6 +10,12 @@ struct ManualModeView: View {
     @State private var seed: UInt64 = 1
     @State private var dragRotation: Double = 0
     @State private var popScale: CGFloat = 1.0
+    @State private var startTime: TimeInterval = Date.timeIntervalSinceReferenceDate
+    // 振った瞬間の「ポン」という視覚フィードバック用。triggerShuffle()でこの時刻を記録し、
+    // TimelineViewの毎フレームでそこからの経過時間に応じてradialBurstを1→0へ減衰させる。
+    // （KaleidoscopeCanvasViewはUIViewRepresentableでAnimatableではないため、
+    //   withAnimationで@Stateを直接変えても滑らかには補間されない。経過時間から都度計算する）
+    @State private var burstStartTime: TimeInterval?
 
     var body: some View {
         ZStack {
@@ -18,6 +24,14 @@ struct ManualModeView: View {
                 // アイドル時もゆっくり回転・脈動させ、静止画に見えないようにする（docs/03b）。
                 let baseRotation = elapsed * speed * 0.25
                 let pulse = (sin(elapsed * 1.6) + 1) / 2
+
+                // 振った瞬間の放射状バースト: burstStartTimeからの経過時間で1→0へイーズアウト減衰。
+                let burstDuration = 0.6
+                let radialBurst: Double = {
+                    guard let start = burstStartTime else { return 0 }
+                    let t = min(1, max(0, (elapsed - start) / burstDuration))
+                    return (1 - t) * (1 - t)
+                }()
 
                 KaleidoscopeCanvasView(parameters: KaleidoscopeParameters(
                     symmetryCount: Int(symmetryCount),
@@ -30,7 +44,8 @@ struct ManualModeView: View {
                     shardDensity: 0.65,
                     noiseAmount: 0.08,
                     flowOffset: motion.flowOffset,
-                    radialBurst: 0
+                    radialBurst: radialBurst,
+                    time: elapsed - startTime
                 ))
                 .scaleEffect(popScale)
                 .ignoresSafeArea()
@@ -53,7 +68,9 @@ struct ManualModeView: View {
 
     private func triggerShuffle() {
         seed = UInt64.random(in: 1...UInt64.max)
-        // 揺らした瞬間の「ポン」という視覚フィードバック（docs/03b）
+        // 揺らした瞬間の「ポン」という視覚フィードバック（docs/03b: 中心からの衝撃波リング、
+        // 模様全体のわずかな拡大→戻り）。放射状バーストとスケールのポップを同じタイミングで発生させる。
+        burstStartTime = Date.timeIntervalSinceReferenceDate
         withAnimation(.spring(response: 0.15, dampingFraction: 0.4)) {
             popScale = 1.06
         }

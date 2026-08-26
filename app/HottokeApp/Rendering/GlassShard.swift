@@ -16,6 +16,10 @@ struct GlassShard {
     let rotation: CGFloat
     let colorIndex: Int
     let shape: GlassShardShape
+    /// 生成時に1回だけ決める、個体ごとに異なる揺らぎの位相・強さ。
+    /// 「回っているだけ」に見えないよう、各ガラス片が独立して呼吸するように動かすために使う。
+    let wobblePhase: CGFloat
+    let wobbleAmount: CGFloat
 }
 
 /// 中心から放射する光の筋。
@@ -30,6 +34,10 @@ struct Spark {
     let radius: CGFloat
     let angle: CGFloat
     let size: CGFloat
+    /// 中心が白、外側がパレットの該当色に染まる放射グラデーションに使う色インデックス。
+    let colorIndex: Int
+    let wobblePhase: CGFloat
+    let wobbleAmount: CGFloat
 }
 
 /// 扇形1つ分の模様データ。この1セットを対称数の回数だけ「スタンプ」して全体を作る。

@@ -25,27 +25,44 @@ enum KaleidoscopeShapeGenerator {
             CGFloat.random(in: 0..<wedgeAngle, using: &rng)
         }
 
+        // docs/03b-visual-prototype-learnings.mdで見つかったバグの移植漏れ対策:
+        // 線形一様乱数（CGFloat.random(in: min...max)）で半径を決めると、円環の面積は半径に
+        // 比例して外側ほど広いのに点の分布は一様なため、中心付近に点が偏り外側（画面端）が
+        // 疎になる。sqrtを使うことで面積に対して一様な分布になる。
+        func areaUniformRadius(min minRadius: CGFloat, max maxRadius: CGFloat) -> CGFloat {
+            let u = CGFloat.random(in: 0...1, using: &rng)
+            return minRadius + sqrt(u) * (maxRadius - minRadius)
+        }
+
+        // 生成時に1回だけ決める、個体ごとに異なる揺らぎの位相・強さ。
+        func randomWobblePhase() -> CGFloat { CGFloat.random(in: 0...(2 * .pi), using: &rng) }
+        func randomWobbleAmount() -> CGFloat { CGFloat.random(in: 0.03...0.1, using: &rng) }
+
         // 大きめの「面」で色の基調を作る。
         let facets: [GlassShard] = (0..<facetCount).map { _ in
             GlassShard(
-                radius: CGFloat.random(in: 0.1...0.95, using: &rng),
+                radius: areaUniformRadius(min: 0.03, max: 0.98),
                 angle: randomAngleWithinWedge(),
                 size: CGFloat.random(in: 0.22...0.4, using: &rng) * (1 + CGFloat(clampedDeformation) * 0.3),
                 rotation: CGFloat.random(in: 0...(2 * .pi), using: &rng),
                 colorIndex: Int.random(in: 0..<6, using: &rng),
-                shape: .diamond
+                shape: .diamond,
+                wobblePhase: randomWobblePhase(),
+                wobbleAmount: randomWobbleAmount()
             )
         }
 
         // 大量の小さな「シャード」で密度を出す。
         let shards: [GlassShard] = (0..<shardCount).map { _ in
             GlassShard(
-                radius: CGFloat.random(in: 0.05...1.0, using: &rng),
+                radius: areaUniformRadius(min: 0.03, max: 1.0),
                 angle: randomAngleWithinWedge(),
                 size: CGFloat.random(in: 0.03...0.12, using: &rng) * (1 + CGFloat(clampedDeformation) * 0.5),
                 rotation: CGFloat.random(in: 0...(2 * .pi), using: &rng),
                 colorIndex: Int.random(in: 0..<6, using: &rng),
-                shape: Bool.random(using: &rng) ? .diamond : .triangle
+                shape: Bool.random(using: &rng) ? .diamond : .triangle,
+                wobblePhase: randomWobblePhase(),
+                wobbleAmount: randomWobbleAmount()
             )
         }
 
@@ -58,12 +75,15 @@ enum KaleidoscopeShapeGenerator {
             )
         }
 
-        // 小さな輝き。
-        let sparks: [Spark] = (0..<sparkCount).map { _ in
+        // 小さな輝き。キラキラ感を強めるため密度を上げる。
+        let sparks: [Spark] = (0..<(sparkCount * 2)).map { _ in
             Spark(
-                radius: CGFloat.random(in: 0.05...1.0, using: &rng),
+                radius: areaUniformRadius(min: 0.03, max: 1.0),
                 angle: randomAngleWithinWedge(),
-                size: CGFloat.random(in: 0.006...0.02, using: &rng)
+                size: CGFloat.random(in: 0.008...0.03, using: &rng),
+                colorIndex: Int.random(in: 0..<6, using: &rng),
+                wobblePhase: randomWobblePhase(),
+                wobbleAmount: randomWobbleAmount()
             )
         }
 
