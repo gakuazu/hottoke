@@ -47,7 +47,8 @@ jobs:
           DEVICE=$(xcrun simctl list devices available 2>/dev/null \
             | grep -E '^[[:space:]]+iPhone' \
             | head -n 1 \
-            | sed -E 's/^[[:space:]]*(.*) \(.*/\1/')
+            | awk -F' \\(' '{print $1}' \
+            | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
           if [ -z "$DEVICE" ]; then
             DEVICE="iPhone 15"
           fi
