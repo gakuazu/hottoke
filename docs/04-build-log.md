@@ -86,4 +86,13 @@
 
 ### ビルド確認
 
-`gh workflow run`でGitHub Actions（iOS Build）を手動起動し、`gh run watch`で結果を確認した。詳細は次の追記を参照。
+コミット・pushしたところ、今回はpushだけで自動的にGitHub Actionsが起動した（前回問題になっていた「push直後は起動しない」現象は発生しなかった）。`gh run watch`で結果を確認。
+
+**結果: 成功。**
+- シミュレータ向けビルド（コンパイルが通るかの確認）: 成功
+- ユニットテスト（模様の対称性ロジックなど）: 成功
+- 実機向けの署名なしビルド・IPA化: 成功（`HottokeApp-unsigned-ipa`としてArtifactに保存済み）
+
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/33021319898
+
+これまでどおり、Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで実機にインストールし直せば、今回の見た目修正が反映される。
