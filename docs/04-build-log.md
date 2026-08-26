@@ -40,4 +40,19 @@
 
 ### ビルド確認について
 
-このセッションではXcode/シミュレータをローカルで動かせないため、`git push`後にGitHub Actions上のビルド結果で確認する。結果はこのログに追記する。
+このセッションではXcode/シミュレータをローカルで動かせないため、`git push`後にGitHub Actions上のビルド結果で確認する。
+
+**結果: 成功。** 1回目の自動ビルドでは「テスト対象のシミュレータの名前の取り出し方」に小さなバグがあり失敗したが（実機・シミュレータ向けのコンパイル自体は最初から成功していた）、修正後の2回目の実行ですべての工程が成功した。
+
+- シミュレータ向けビルド（コンパイルが通るかの確認）: 成功
+- ユニットテスト（模様の対称性ロジックなど）: 成功
+- 実機向けの署名なしビルド・IPA化: 成功（`HottokeApp-unsigned-ipa` としてArtifactに保存済み）
+
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/32986403150
+
+**運用上の注意（1点）**: `git push`しただけでは自動的にビルドが開始されない状態を確認した（新しいリポジトリでのGitHub Actionsの初回有効化に関連する挙動と見られる）。確実にビルドを走らせるには、GitHub Actionsの画面で「iOS Build」ワークフローを開き「Run workflow」ボタンを押すか、`gh workflow run "iOS Build" --repo gakuazu/hottoke --ref main` を実行する（このエージェントは今回そちらの方法で確認した）。次回以降のpushで自動的に動くようになるか、今後の実装作業の中で引き続き確認する。
+
+**実機へのインストール方法（オーナー向け）**:
+1. 上記の実行結果ページ（または`gh run list`で最新の成功結果）を開き、「Artifacts」から`HottokeApp-unsigned-ipa`をダウンロードする
+2. 中の`HottokeApp-unsigned.ipa`を、SideloadlyでPC/Macに接続したiPhoneに無料Apple IDで署名してインストールする
+3. 署名は7日で失効するため、1週間ごとに同じ手順でインストールし直す
