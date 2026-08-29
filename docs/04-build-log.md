@@ -173,3 +173,16 @@
 手動モードでスライダーを指で動かした場合も、自動でゆっくり揺れ動く場合も、どちらも同じ滑らかな見え方になる。
 
 変更ファイル: `app/HottokeApp/Rendering/KaleidoscopeRenderer.swift`
+
+### ビルド確認について
+
+コミット・pushしたところ、今回もpushだけで自動的にGitHub Actionsが起動した。`gh run watch`で結果を確認。
+
+**結果: 成功（1回目の実行でそのまま成功）。**
+- シミュレータ向けビルド（コンパイルが通るかの確認）: 成功
+- ユニットテスト: 成功
+- 実機向けの署名なしビルド・IPA化: 成功（`HottokeApp-unsigned-ipa`としてArtifactに保存済み）
+
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/33248221906
+
+これまでどおり、Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで実機にインストールし直せば、今回の2つの修正が反映される。
