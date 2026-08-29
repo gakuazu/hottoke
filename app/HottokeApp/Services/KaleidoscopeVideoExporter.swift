@@ -184,6 +184,12 @@ final class KaleidoscopeVideoExporter {
         // 継ぎ目が目立つため）。
         let symmetryCount = 6 + Int((seed &+ UInt64(max(0, data.stepCount))) % 7)
 
+        // 歩数が多い日ほど模様が細かく込み入って見えるようにする（オーナーからの要望）。
+        // 1万5千歩でほぼ頭打ちになるよう正規化し、密度(detail)に上乗せする。
+        // セグメントごとの活動の強さ（smoothedDeformation）による変化は維持しつつ、
+        // その日全体の歩数が多いほど底上げされる形にする。
+        let stepFactor = min(1.0, Double(max(0, data.stepCount)) / 15000.0)
+
         return (0..<frameCount).map { index in
             let keyframe = keyframes[index]
             let elapsed = elapsedTimes[index]
@@ -203,11 +209,12 @@ final class KaleidoscopeVideoExporter {
                 radialBurst: radialBurst,
                 time: elapsed,
                 // スタイル自体は動画全体で1つに固定（呼び出し元でdominantMovingKindから決定済み）。
-                // 密度・複雑さ(detail)はセグメントごとの活動の強さ(deformationIntensity)を流用し、
-                // 動画の中でも活動が盛り上がる場面ほど模様が込み入るようにする。
+                // 密度・複雑さ(detail)はセグメントごとの活動の強さ(deformationIntensity)を基本に、
+                // その日全体の歩数(stepFactor)ぶん底上げする。動画の中でも活動が盛り上がる場面
+                // ほど模様が込み入り、かつ歩数が多い日全体としても他の日より込み入って見える。
                 // detailDrift/breathEnvelopeによる揺らぎはKaleidoscopeRenderer側でtimeから適用される。
                 patternStyle: patternStyle,
-                detail: smoothedDeformation[index]
+                detail: min(1.0, smoothedDeformation[index] + stepFactor * 0.35)
             )
         }
     }
