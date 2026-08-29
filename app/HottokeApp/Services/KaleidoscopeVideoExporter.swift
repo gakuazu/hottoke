@@ -49,6 +49,11 @@ final class KaleidoscopeVideoExporter {
         let fpsValue = fps
         let videoSizeValue = videoSize
         let durationValue = duration
+        // その日いちばん長く続いた「移動系」の活動種別から、動画全体で使う模様スタイルを1つに
+        // 決める（docs/02-spec.md参照）。時間帯やセグメントが変わるたびにスタイル自体が
+        // 切り替わると忙しない見た目になるため、スタイルは動画を通して固定し、密度・複雑さ
+        // (detail)の方をセグメントごとの活動の強さで変化させる（parameters(for:)内）。
+        let patternStyle = data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             var frameIndex = 0
@@ -70,7 +75,7 @@ final class KaleidoscopeVideoExporter {
 
                     let keyframe = keyframes[min(frameIndex, keyframes.count - 1)]
                     let progress = frameCount > 1 ? Double(frameIndex) / Double(frameCount - 1) : 0
-                    let parameters = Self.parameters(for: keyframe, progress: progress, data: data, seed: seed, duration: durationValue)
+                    let parameters = Self.parameters(for: keyframe, progress: progress, data: data, seed: seed, duration: durationValue, patternStyle: patternStyle)
 
                     guard let pixelBufferPool = adaptor.pixelBufferPool else {
                         continuation.resume(throwing: ExportError(message: "フレームバッファの確保に失敗しました。"))
@@ -98,10 +103,13 @@ final class KaleidoscopeVideoExporter {
 
     /// キーフレーム情報 → 実際のレンダリングパラメータへの変換。
     /// docs/02-spec.md 3.2節（動きのマッピング）・3.3節（色パレット）を適用する。
-    private static func parameters(for keyframe: KaleidoscopeKeyframe, progress: Double, data: DailyActivityData, seed: UInt64, duration: Double) -> KaleidoscopeParameters {
+    private static func parameters(for keyframe: KaleidoscopeKeyframe, progress: Double, data: DailyActivityData, seed: UInt64, duration: Double, patternStyle: PatternStyle) -> KaleidoscopeParameters {
         let style = ActivityStyle.style(for: keyframe.activityKind)
         let elapsed = progress * duration
-        let rotation = elapsed * style.rotationSpeed
+        // 回転速度も一定にせず、プロトタイプのspeedDriftと同じ「呼吸する回転」にする
+        // （KaleidoscopeDynamics参照）。動画は時系列に沿った1本のタイムラインなので、
+        // ライブプレビューと同様に経過時間(elapsed)だけから閉じた式で回転角を求める。
+        let rotation = KaleidoscopeDynamics.organicRotationAngle(elapsed: elapsed, angularSpeed: style.rotationSpeed)
         let pulsePhase = (sin(elapsed * 2.0) + 1) / 2
 
         // docs/02-spec.md 3.2節「floorsAscended → 中心から外側・上方向への広がり」の簡易版。
@@ -120,7 +128,13 @@ final class KaleidoscopeVideoExporter {
             noiseAmount: style.noiseAmount,
             flowOffset: CGVector(dx: style.flowBias.dx * 20, dy: style.flowBias.dy * 20),
             radialBurst: radialBurst,
-            time: elapsed
+            time: elapsed,
+            // スタイル自体は動画全体で1つに固定（呼び出し元でdominantMovingKindから決定済み）。
+            // 密度・複雑さ(detail)はセグメントごとの活動の強さ(deformationIntensity)を流用し、
+            // 動画の中でも活動が盛り上がる場面ほど模様が込み入るようにする。
+            // detailDrift/breathEnvelopeによる揺らぎはKaleidoscopeRenderer側でtimeから適用される。
+            patternStyle: patternStyle,
+            detail: style.deformationIntensity
         )
     }
 

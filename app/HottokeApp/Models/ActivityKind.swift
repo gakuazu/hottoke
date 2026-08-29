@@ -36,6 +36,9 @@ enum ActivityKind: String, CaseIterable, Equatable {
         case .unknown: return "不明"
         }
     }
+
+    /// この活動種別のときに使う数学模様スタイル。マッピング表本体はPatternStyle.swift参照。
+    var patternStyle: PatternStyle { PatternStyle.style(for: self) }
 }
 
 /// 活動種別 → 模様の動きパラメータへの変換。docs/02-spec.md 3.2節の表をそのまま数値化したもの。

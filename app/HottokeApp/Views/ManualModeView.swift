@@ -7,6 +7,8 @@ struct ManualModeView: View {
     @State private var symmetryCount: Double = 8
     @State private var speed: Double = 0.5
     @State private var palette: KaleidoscopePalette = .daytime
+    @State private var patternStyle: PatternStyle = .waves
+    @State private var detail: Double = 0.5
     @State private var seed: UInt64 = 1
     @State private var dragRotation: Double = 0
     @State private var popScale: CGFloat = 1.0
@@ -22,7 +24,10 @@ struct ManualModeView: View {
             TimelineView(.animation) { timeline in
                 let elapsed = timeline.date.timeIntervalSinceReferenceDate
                 // アイドル時もゆっくり回転・脈動させ、静止画に見えないようにする（docs/03b）。
-                let baseRotation = elapsed * speed * 0.25
+                // 回転速度そのものは一定にせず、プロトタイプのspeedDriftと同じ考え方で
+                // ゆっくり加速・減速（たまに一瞬逆回転も）する「呼吸する回転」にする
+                // （KaleidoscopeDynamics参照。基準速度speed*0.25は従来の見た目の速さを踏襲）。
+                let baseRotation = KaleidoscopeDynamics.organicRotationAngle(elapsed: elapsed, angularSpeed: speed * 0.25)
                 let pulse = (sin(elapsed * 1.6) + 1) / 2
 
                 // 振った瞬間の放射状バースト: burstStartTimeからの経過時間で1→0へイーズアウト減衰。
@@ -45,7 +50,9 @@ struct ManualModeView: View {
                     noiseAmount: 0.08,
                     flowOffset: motion.flowOffset,
                     radialBurst: radialBurst,
-                    time: elapsed - startTime
+                    time: elapsed - startTime,
+                    patternStyle: patternStyle,
+                    detail: detail
                 ))
                 .scaleEffect(popScale)
                 .ignoresSafeArea()
@@ -89,11 +96,22 @@ struct ManualModeView: View {
                     .font(.footnote)
                     .foregroundStyle(.white.opacity(0.85))
 
+                HStack(spacing: 10) {
+                    ForEach(PatternStyle.allCases) { style in
+                        styleSwatch(style)
+                    }
+                }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("対称数: \(Int(symmetryCount))")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.8))
                     Slider(value: $symmetryCount, in: 4...16, step: 1)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("密度・複雑さ")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Slider(value: $detail, in: 0...1)
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("速度")
@@ -111,6 +129,29 @@ struct ManualModeView: View {
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20))
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+        }
+    }
+
+    private func styleSwatch(_ style: PatternStyle) -> some View {
+        Button {
+            patternStyle = style
+        } label: {
+            VStack(spacing: 5) {
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(width: 34, height: 34)
+                        .overlay(
+                            Circle().stroke(Color.white.opacity(patternStyle == style ? 0.9 : 0.2), lineWidth: patternStyle == style ? 2 : 1)
+                        )
+                    Image(systemName: style.iconName)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(patternStyle == style ? 1 : 0.6))
+                }
+                Text(style.shortLabel)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.white.opacity(patternStyle == style ? 0.9 : 0.5))
+            }
         }
     }
 

@@ -116,17 +116,21 @@ struct TodayView: View {
             TimelineView(.animation) { timeline in
                 let elapsed = timeline.date.timeIntervalSinceReferenceDate
                 let hour = Calendar.current.component(.hour, from: Date())
+                // 待っている間のプレースホルダーなので特定の活動には結び付けず、
+                // 穏やかな「波の干渉」スタイルで表示する（実際の模様は生成完了後に差し替わる）。
                 KaleidoscopeCanvasView(parameters: KaleidoscopeParameters(
                     symmetryCount: 8,
                     seed: 777,
                     palette: .forTimeOfDay(.of(hour: hour)),
-                    rotation: elapsed * 0.35,
+                    rotation: KaleidoscopeDynamics.organicRotationAngle(elapsed: elapsed, angularSpeed: 0.35),
                     pulsePhase: (sin(elapsed * 1.6) + 1) / 2,
                     deformationIntensity: 0.5,
                     rotationSpeed: 0.35,
                     shardDensity: 0.6,
                     noiseAmount: 0.08,
-                    time: elapsed
+                    time: elapsed,
+                    patternStyle: .waves,
+                    detail: 0.5
                 ))
             }
             VStack(spacing: 8) {

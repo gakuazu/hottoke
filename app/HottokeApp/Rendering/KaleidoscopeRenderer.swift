@@ -12,6 +12,19 @@ import CoreGraphics
 ///  2. 偶数番目・奇数番目の扇形は、単純な上下反転ではなく「扇形自身の中心線（二等分線）を
 ///     軸にした反転」にする。軸を間違えると隣の扇形の範囲にずれて重なり、対称数の半分しか
 ///     埋まらない不具合になる。
+///
+/// 扇形1つ分の「中身」は、ガラス片を敷き詰める旧方式（GlassShard/KaleidoscopeShapeGenerator、
+/// 現在は未使用）から、「数学模様」4スタイル（幾何学タイル/スピログラフ/波の干渉/フラクタル分岐）
+/// に置き換えた。実装はブラウザ上のHTML/Canvasプロトタイプ（renderTiling/renderSpirograph/
+/// renderWaves/renderFractal）をCoreGraphics APIへそのまま移植したもの。移植にあたっての
+/// API対応（Canvas 2D → CoreGraphics）:
+///   - g.globalAlpha        → ctx.setAlpha(_:)
+///   - g.globalCompositeOperation = 'lighter' → ctx.setBlendMode(.plusLighter)
+///   - g.globalCompositeOperation = 'source-over' → ctx.setBlendMode(.normal)
+///   - g.beginPath()/moveTo/lineTo/stroke() → CGMutablePath + ctx.addPath/strokePath()
+///     （CoreGraphicsはstrokePath()の後にカレントパスが空になるため、同じパスを複数回
+///     ストロークするJSコード＝グロー効果の二度塗りは、都度addPathし直す必要がある）
+///   - g.arc(cx,cy,r,0,2π); g.fill() → ctx.fillEllipse(in:)
 enum KaleidoscopeRenderer {
 
     static func render(into context: CGContext, size: CGSize, parameters: KaleidoscopeParameters) {
@@ -23,29 +36,28 @@ enum KaleidoscopeRenderer {
         let radius = min(size.width, size.height) / 2
 
         // 背景: ベタ塗りグラデーションではなく暗い下地のみ（動画書き出しに透過チャンネルの
-        // ないmp4を使うため塗りつぶし自体は必要）。ガラス片は通常合成で描画するため、
-        // この暗い下地の上でも本来の鮮やかな色がそのまま乗る（乗算合成だと黒背景と
-        // 掛け合わさって色が潰れてしまうため使わない。詳細はrenderWedgeBitmap内コメント参照）。
+        // ないmp4を使うため塗りつぶし自体は必要）。
         context.setFillColor(CGColor(red: 0.02, green: 0.02, blue: 0.04, alpha: 1))
         context.fill(CGRect(origin: .zero, size: size))
 
-        let pattern = KaleidoscopeShapeGenerator.generateWedge(
-            symmetryCount: n,
-            seed: parameters.seed,
-            density: parameters.shardDensity,
-            deformation: parameters.deformationIntensity
-        )
-
         // ルール1: 扇形は1回だけオフスクリーンに描画する。
-        guard let wedgeImage = renderWedgeBitmap(pattern: pattern, radius: radius, palette: parameters.palette, time: parameters.time, noiseAmount: parameters.noiseAmount) else {
+        guard let wedgeImage = renderWedgeBitmap(
+            style: parameters.patternStyle,
+            symmetryCount: n,
+            radius: radius,
+            palette: parameters.palette,
+            time: parameters.time,
+            detail: parameters.detail
+        ) else {
             // 何らかの理由で描画できなくても、描画ループ自体は止めない（docs/03b 安全設計）。
             return
         }
 
         // 「振る」操作の変位は模様全体をまとめて動かす（個々の扇形ごとに別方向へずらさない）。
         let shiftedCenter = CGPoint(x: center.x + parameters.flowOffset.dx, y: center.y + parameters.flowOffset.dy)
-        // アイドル時の呼吸するような拍動。
-        let pulseScale = 1.0 + (CGFloat(parameters.pulsePhase) - 0.5) * 0.04
+        // ゆっくりとしたズームイン・アウトの呼吸（プロトタイプstampAllのpulse/breathEnvelopeを移植。
+        // KaleidoscopeDynamics参照）。
+        let pulseScale = CGFloat(KaleidoscopeDynamics.zoomPulse(time: parameters.time))
 
         context.saveGState()
         context.translateBy(x: shiftedCenter.x, y: shiftedCenter.y)
@@ -81,7 +93,7 @@ enum KaleidoscopeRenderer {
 
     // MARK: - 扇形1つ分をオフスクリーンビットマップに描画
 
-    private static func renderWedgeBitmap(pattern: WedgePattern, radius: CGFloat, palette: KaleidoscopePalette, time: Double, noiseAmount: Double) -> CGImage? {
+    private static func renderWedgeBitmap(style: PatternStyle, symmetryCount: Int, radius: CGFloat, palette: KaleidoscopePalette, time: Double, detail: Double) -> CGImage? {
         let dimension = max(2, Int(radius.rounded(.up)) * 2)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(
@@ -94,111 +106,365 @@ enum KaleidoscopeRenderer {
             bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
         ) else { return nil }
 
-        let tip = CGPoint(x: CGFloat(dimension) / 2, y: CGFloat(dimension) / 2)
         let colors = palette.cgColors
+        guard !colors.isEmpty else { return ctx.makeImage() }
 
-        func point(radiusFraction: CGFloat, angle: CGFloat) -> CGPoint {
-            let r = radiusFraction * radius
-            return CGPoint(x: tip.x + r * cos(angle), y: tip.y + r * sin(angle))
+        let tip = CGFloat(dimension) / 2
+        let wedgeAngle = CGFloat(2 * Double.pi / Double(symmetryCount))
+
+        ctx.saveGState()
+        ctx.translateBy(x: tip, y: tip)
+
+        // 扇形の角度範囲だけをクリップする。プロトタイプのrenderTiling/renderSpirograph/
+        // renderWaves/renderFractalはいずれも円全体を対象に自由に描く実装のため（モチーフの
+        // 格子・波の輪・フラクタルの枝が扇形の外にもはみ出す）、旧GlassShard方式のように
+        // 「生成する座標そのものを扇形内に収める」やり方ではなく、プロトタイプと同じく
+        // 「扇形の二等分パイ形にクリップしてから描く」方式にする必要がある。
+        let clipPath = CGMutablePath()
+        clipPath.move(to: .zero)
+        clipPath.addArc(center: .zero, radius: radius, startAngle: 0, endAngle: wedgeAngle, clockwise: false)
+        clipPath.closeSubpath()
+        ctx.saveGState()
+        ctx.addPath(clipPath)
+        ctx.clip()
+
+        // 密度・複雑さ(detail)を基準値からゆっくり揺らす（プロトタイプrenderWedgeのdetailDrift）。
+        let effectiveDetail = KaleidoscopeDynamics.effectiveDetail(base: detail, time: time)
+        let R = Double(radius)
+
+        switch style {
+        case .tiling:
+            renderTiling(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail)
+        case .spirograph:
+            renderSpirograph(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount)
+        case .waves:
+            renderWaves(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount)
+        case .fractal:
+            renderFractal(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount)
         }
 
-        func path(for shape: GlassShardShape, size: CGFloat) -> CGPath {
-            let path = CGMutablePath()
-            switch shape {
-            case .diamond:
-                path.move(to: CGPoint(x: 0, y: -size))
-                path.addLine(to: CGPoint(x: size * 0.6, y: 0))
-                path.addLine(to: CGPoint(x: 0, y: size))
-                path.addLine(to: CGPoint(x: -size * 0.6, y: 0))
-                path.closeSubpath()
-            case .triangle:
-                path.move(to: CGPoint(x: 0, y: -size))
-                path.addLine(to: CGPoint(x: size * 0.86, y: size * 0.5))
-                path.addLine(to: CGPoint(x: -size * 0.86, y: size * 0.5))
-                path.closeSubpath()
-            }
-            return path
-        }
-
-        // 個体ごとの揺らぎの強さ。noiseAmount（アクティビティ種別ごとに変わる係数）で全体スケールを
-        // 調整しつつ、wobbleAmount/wobblePhaseは形状ごとに生成時に1回だけ決まった値を使うため、
-        // 各ガラス片が互いにズレたタイミングで独立して呼吸するように見える。
-        let noiseScale = 1 + CGFloat(noiseAmount) * 4
-        func wobbledRadius(base: CGFloat, phase: CGFloat, amount: CGFloat) -> CGFloat {
-            let wobble = sin(time * 1.7 + Double(phase)) * Double(amount * noiseScale)
-            return base * CGFloat(1 + wobble)
-        }
-
-        func drawShard(_ shard: GlassShard, alpha: CGFloat) {
-            guard !colors.isEmpty else { return }
-            let effectiveRadius = wobbledRadius(base: shard.radius, phase: shard.wobblePhase, amount: shard.wobbleAmount)
-            let p = point(radiusFraction: effectiveRadius, angle: shard.angle)
-            let s = shard.size * radius
-            let shapePath = path(for: shard.shape, size: s)
-
-            ctx.saveGState()
-            ctx.translateBy(x: p.x, y: p.y)
-            ctx.rotate(by: shard.rotation)
-
-            // multiply（乗算）合成は、docs/03bのブラウザ版のように背景が透明な場合にのみ
-            // 「重なった部分だけ濃くなる」効果になる。このSwift実装では背景に暗い下地を
-            // 塗っているため、multiplyのままだと黒×色でほぼ黒に潰れてしまっていた
-            // （実機で「キラキラしない・色が死んでいる」と指摘された根本原因）。
-            // 通常合成にして、ガラス片本来の鮮やかな色がそのまま乗るようにする。
-            ctx.setBlendMode(.normal)
-            let color = colors[shard.colorIndex % colors.count]
-            ctx.setFillColor(color.copy(alpha: alpha) ?? color)
-            ctx.addPath(shapePath)
-            ctx.fillPath()
-
-            // 角に軽いハイライトのストローク（lighten合成）で硬質感を出す。
-            ctx.setBlendMode(.lighten)
-            ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.35))
-            ctx.setLineWidth(max(0.5, s * 0.05))
-            ctx.addPath(shapePath)
-            ctx.strokePath()
-
-            ctx.restoreGState()
-        }
-
-        // レイヤー構成: 面(facet) → シャード(shard) → 光の筋(ray) → 輝き(spark)
-        // 通常合成に変更したため、透け感を保ちつつくっきり見えるようアルファ値も引き上げる。
-        for facet in pattern.facets { drawShard(facet, alpha: 0.85) }
-        for shard in pattern.shards { drawShard(shard, alpha: 0.9) }
-
-        for ray in pattern.rays {
-            ctx.saveGState()
-            ctx.setBlendMode(.screen)
-            ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.12))
-            ctx.setLineWidth(ray.width * radius)
-            ctx.move(to: tip)
-            ctx.addLine(to: point(radiusFraction: ray.length, angle: ray.angle))
-            ctx.strokePath()
-            ctx.restoreGState()
-        }
-
-        // 輝き(spark): 平らな白丸ではなく、白(中心)→パレット色→透明の放射グラデーションで
-        // キラキラした光の粒に見えるようにする。
-        for spark in pattern.sparks {
-            guard !colors.isEmpty else { break }
-            let effectiveRadius = wobbledRadius(base: spark.radius, phase: spark.wobblePhase, amount: spark.wobbleAmount)
-            let p = point(radiusFraction: effectiveRadius, angle: spark.angle)
-            let s = spark.size * radius
-            let tint = colors[spark.colorIndex % colors.count]
-            guard let tintComponents = tint.components, tintComponents.count >= 3 else { continue }
-            let sparkColors: [CGColor] = [
-                CGColor(red: 1, green: 1, blue: 1, alpha: 0.95),
-                CGColor(red: tintComponents[0], green: tintComponents[1], blue: tintComponents[2], alpha: 0.7),
-                CGColor(red: tintComponents[0], green: tintComponents[1], blue: tintComponents[2], alpha: 0)
-            ]
-            guard let gradient = CGGradient(colorsSpace: colorSpace, colors: sparkColors as CFArray, locations: [0, 0.4, 1]) else { continue }
-            ctx.saveGState()
-            ctx.setBlendMode(.screen)
-            ctx.drawRadialGradient(gradient, startCenter: p, startRadius: 0, endCenter: p, endRadius: s / 2, options: [])
-            ctx.restoreGState()
-        }
-
+        ctx.restoreGState() // クリップを解除
+        ctx.restoreGState() // 平行移動を解除
         return ctx.makeImage()
+    }
+
+    // MARK: - 幾何学タイル（プロトタイプ renderTiling / drawTileMotif の移植）
+
+    /// (row,col)から常に同じ値を返す簡易ハッシュ。乱数ではなくこれを使うことで、
+    /// 「同じ格子点は毎フレーム同じモチーフ・色になる」を保ちつつ見た目にはバラつきを出せる。
+    private static func hashRC(_ a: Double, _ b: Double) -> Double {
+        let x = sin(a * 127.1 + b * 311.7) * 43758.5453
+        return x - floor(x)
+    }
+
+    private static func tileLatticePos(row: Int, col: Int, cell: Double) -> (x: Double, y: Double) {
+        let offsetX = (row % 2 == 0) ? 0.0 : cell / 2
+        return (Double(col) * cell + offsetX, Double(row) * cell * 0.866)
+    }
+
+    private static func polygonPath(size: Double, sides: Int, rotationOffset: Double) -> CGPath {
+        let path = CGMutablePath()
+        for i in 0...sides {
+            let a = rotationOffset + Double(i) * (2 * Double.pi / Double(sides))
+            let point = CGPoint(x: CGFloat(cos(a) * size), y: CGFloat(sin(a) * size))
+            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        return path
+    }
+
+    /// 単調にならないよう5種類のモチーフを用意し、格子点ごとに振り分ける。
+    private static func drawTileMotif(ctx: CGContext, kind: Int, s: Double, color: CGColor) {
+        ctx.setStrokeColor(color)
+        ctx.setLineWidth(1.3)
+        ctx.setAlpha(0.82)
+        ctx.setBlendMode(.normal)
+        switch kind {
+        case 0: // 八芒星
+            ctx.addPath(polygonPath(size: s, sides: 4, rotationOffset: 0)); ctx.strokePath()
+            ctx.addPath(polygonPath(size: s, sides: 4, rotationOffset: .pi / 4)); ctx.strokePath()
+        case 1: // 六芒星
+            ctx.addPath(polygonPath(size: s, sides: 3, rotationOffset: 0)); ctx.strokePath()
+            ctx.addPath(polygonPath(size: s, sides: 3, rotationOffset: .pi)); ctx.strokePath()
+        case 2: // 六角の二重輪
+            ctx.addPath(polygonPath(size: s, sides: 6, rotationOffset: 0)); ctx.strokePath()
+            ctx.addPath(polygonPath(size: s * 0.55, sides: 6, rotationOffset: .pi / 6)); ctx.strokePath()
+        case 3: // 正方形+円
+            ctx.addPath(polygonPath(size: s, sides: 4, rotationOffset: .pi / 4)); ctx.strokePath()
+            let circle = CGMutablePath()
+            circle.addEllipse(in: CGRect(x: -s * 0.6, y: -s * 0.6, width: s * 1.2, height: s * 1.2))
+            ctx.addPath(circle); ctx.strokePath()
+        default: // 花びら(ロゼット)
+            for i in 0..<6 {
+                let a = Double(i) * (2 * Double.pi / 6)
+                let cx = cos(a) * s * 0.4, cy = sin(a) * s * 0.4
+                let petal = CGMutablePath()
+                petal.addEllipse(in: CGRect(x: cx - s * 0.3, y: cy - s * 0.3, width: s * 0.6, height: s * 0.6))
+                ctx.addPath(petal); ctx.strokePath()
+            }
+        }
+        ctx.setBlendMode(.plusLighter)
+        ctx.setAlpha(0.5)
+        ctx.setFillColor(color)
+        let dot = CGMutablePath()
+        dot.addEllipse(in: CGRect(x: -s * 0.1, y: -s * 0.1, width: s * 0.2, height: s * 0.2))
+        ctx.addPath(dot)
+        ctx.fillPath()
+        ctx.setBlendMode(.normal)
+    }
+
+    private static func renderTiling(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double) {
+        let cell = R / (3 + detail * 5.5)
+        let span = Int((R * 1.1 / cell).rounded(.up)) + 2
+        ctx.setLineCap(.round)
+
+        // モチーフ同士を編み込むような細い地紋線（三角格子の辺の一部）。
+        // これがないと「同じシールが並んでいるだけ」に見えやすいため。
+        ctx.saveGState()
+        ctx.setAlpha(0.16)
+        ctx.setLineWidth(1)
+        for row in -span...span {
+            for col in -span...span {
+                let c = tileLatticePos(row: row, col: col, cell: cell)
+                if hypot(c.x, c.y) > R * 1.15 { continue }
+                let r = tileLatticePos(row: row, col: col + 1, cell: cell)
+                let d = tileLatticePos(row: row + 1, col: col, cell: cell)
+                ctx.setStrokeColor(palette[abs(row + col) % palette.count])
+
+                let toRight = CGMutablePath()
+                toRight.move(to: CGPoint(x: c.x, y: c.y))
+                toRight.addLine(to: CGPoint(x: r.x, y: r.y))
+                ctx.addPath(toRight); ctx.strokePath()
+
+                let toDown = CGMutablePath()
+                toDown.move(to: CGPoint(x: c.x, y: c.y))
+                toDown.addLine(to: CGPoint(x: d.x, y: d.y))
+                ctx.addPath(toDown); ctx.strokePath()
+            }
+        }
+        ctx.restoreGState()
+
+        for row in -span...span {
+            for col in -span...span {
+                let c = tileLatticePos(row: row, col: col, cell: cell)
+                let dist = hypot(c.x, c.y)
+                if dist > R * 1.08 { continue }
+
+                let h1 = hashRC(Double(row), Double(col))
+                let h2 = hashRC(Double(row + 91), Double(col - 17))
+                let h3 = hashRC(Double(row - 33), Double(col + 58))
+                let motif = Int(h1 * 5)
+                let color = palette[Int(h2 * Double(palette.count))]
+                let sizeScale = 0.30 + h3 * 0.22 // 0.30〜0.52でばらつかせ、粒の大小もつける。
+                let s = cell * sizeScale * (0.9 + 0.1 * sin(t * 1.1 + dist * 0.045))
+
+                ctx.saveGState()
+                ctx.translateBy(x: CGFloat(c.x), y: CGFloat(c.y))
+                ctx.rotate(by: t * 0.12 + h2 * 2 * .pi + dist * 0.0025)
+                drawTileMotif(ctx: ctx, kind: motif, s: s, color: color)
+                ctx.restoreGState()
+            }
+        }
+    }
+
+    // MARK: - スピログラフ（プロトタイプ renderSpirograph の移植）
+
+    private static func renderSpirograph(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
+        // 層のRbを中心寄り〜外周まで広く分散させ、さらに中心にコアの発光を足して空洞を埋める
+        // （層のRbが外周寄りの狭い帯に集まると中心付近ががら空きになっていた反省）。
+        let layers = 3 + Int((detail * 3).rounded()) // 3〜6層
+        for layerIndex in 0..<layers {
+            let spanT = layers == 1 ? 1.0 : Double(layerIndex) / Double(layers - 1)
+            let Rb = R * (0.15 + 0.79 * spanT) // 中心近くから外周まで層を配置
+            let rb = R / Double(n + 1 + layerIndex)
+            let d = rb * (0.55 + 0.3 * detail)
+            let color = palette[layerIndex % palette.count]
+            let k = (Rb - rb) / rb
+            let revolutions = n + 1 + layerIndex
+            let steps = 360 * min(revolutions, 10)
+
+            let path = CGMutablePath()
+            for i in 0...steps {
+                let tt = (Double(i) / Double(steps)) * 2 * Double.pi * Double(revolutions) + t * (0.05 + Double(layerIndex) * 0.008)
+                let x = (Rb - rb) * cos(tt) + d * cos(k * tt)
+                let y = (Rb - rb) * sin(tt) - d * sin(k * tt)
+                let point = CGPoint(x: CGFloat(x), y: CGFloat(y))
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(1.5)
+            ctx.setAlpha(0.82)
+            ctx.setBlendMode(.normal)
+            ctx.addPath(path)
+            ctx.strokePath()
+
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+            ctx.setAlpha(0.30)
+            ctx.setLineWidth(5)
+            ctx.setStrokeColor(color)
+            ctx.addPath(path) // strokePath()後はカレントパスが空になるため再度addPathする
+            ctx.strokePath()
+            ctx.restoreGState()
+        }
+
+        // 最内層のさらに内側が寂しくならないよう、中心に小さな発光コアを添える。
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        let coreColor = palette[0]
+        let clearCoreColor = coreColor.copy(alpha: 0) ?? coreColor
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [coreColor, clearCoreColor] as CFArray, locations: [0, 1]) {
+            ctx.setAlpha(0.55)
+            ctx.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: CGFloat(R * 0.13), options: [])
+        }
+        ctx.restoreGState()
+    }
+
+    // MARK: - 波の干渉（プロトタイプ renderWaves の移植）
+
+    private static func renderWaves(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
+        // 線だけだと寂しく見えるため、(1) 隣り合う輪の間を半透明で塗って帯にする、
+        // (2) 波の頂点に小さなきらめきを添える、(3) グローを強めにする、の3つで満たす。
+        let ringCount = 6 + Int((detail * 8).rounded())
+        let k1 = Double(n), k2 = Double(n) * 2, k3 = max(3.0, Double(n) - 2)
+        let steps = 220
+        var prevPts: [(x: Double, y: Double, mod: Double)]?
+
+        for ri in 0..<ringCount {
+            let baseR = R * Double(ri + 1) / Double(ringCount)
+            let amp = R * 0.05 * (1 - Double(ri) / Double(ringCount) * 0.35)
+            let color = palette[ri % palette.count]
+            var pts: [(x: Double, y: Double, mod: Double)] = []
+            pts.reserveCapacity(steps + 1)
+            for i in 0...steps {
+                let theta = (Double(i) / Double(steps)) * 2 * Double.pi
+                let mod = sin(k1 * theta + t * 0.6) * amp
+                    + sin(k2 * theta - t * 0.9) * amp * 0.5
+                    + sin(k3 * theta + t * 0.3) * amp * 0.3
+                let r = baseR + mod
+                pts.append((cos(theta) * r, sin(theta) * r, mod))
+            }
+
+            if let prevPts {
+                ctx.setBlendMode(.normal)
+                ctx.setAlpha(0.11)
+                ctx.setFillColor(color)
+                let band = CGMutablePath()
+                band.move(to: CGPoint(x: prevPts[0].x, y: prevPts[0].y))
+                for i in 1..<prevPts.count { band.addLine(to: CGPoint(x: prevPts[i].x, y: prevPts[i].y)) }
+                for i in stride(from: pts.count - 1, through: 0, by: -1) { band.addLine(to: CGPoint(x: pts[i].x, y: pts[i].y)) }
+                band.closeSubpath()
+                ctx.addPath(band)
+                ctx.fillPath()
+            }
+
+            let ring = CGMutablePath()
+            ring.move(to: CGPoint(x: pts[0].x, y: pts[0].y))
+            for i in 1..<pts.count { ring.addLine(to: CGPoint(x: pts[i].x, y: pts[i].y)) }
+            ring.closeSubpath()
+
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(1.3)
+            ctx.setAlpha(0.68)
+            ctx.setBlendMode(.normal)
+            ctx.addPath(ring)
+            ctx.strokePath()
+
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+            ctx.setAlpha(0.26)
+            ctx.setLineWidth(4.5)
+            ctx.setStrokeColor(color)
+            ctx.addPath(ring)
+            ctx.strokePath()
+            ctx.restoreGState()
+
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+            ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+            var i = 0
+            while i < pts.count {
+                let point = pts[i]
+                if point.mod > amp * 0.5 {
+                    ctx.setAlpha(0.55)
+                    let sparkSize = R * 0.014
+                    ctx.fillEllipse(in: CGRect(x: point.x - sparkSize / 2, y: point.y - sparkSize / 2, width: sparkSize, height: sparkSize))
+                }
+                i += 11
+            }
+            ctx.restoreGState()
+
+            prevPts = pts
+        }
+
+        // 一番内側もただの黒にならないよう、うっすら塗って埋める。
+        ctx.saveGState()
+        ctx.setBlendMode(.normal)
+        ctx.setAlpha(0.14)
+        ctx.setFillColor(palette[0])
+        let innerRadius = R / Double(ringCount) * 0.85
+        ctx.fillEllipse(in: CGRect(x: -innerRadius, y: -innerRadius, width: innerRadius * 2, height: innerRadius * 2))
+        ctx.restoreGState()
+    }
+
+    // MARK: - フラクタル分岐（プロトタイプ renderFractal の移植）
+
+    private static func renderFractal(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
+        let wedgeAngle = (2 * Double.pi) / Double(n)
+        // 密度を上げても「なんとなく長くなるだけ」にならないよう、分岐角は深さで割って
+        // 縮めない（固定角）。かわりに: 幹の本数・分岐数・深さの3つを密度に応じて増やし、
+        // 込み入り方そのものが変わるようにする。
+        let bushy = detail > 0.62
+        let childCount = bushy ? 3 : 2
+        let maxDepth = bushy ? (4 + Int((detail * 3).rounded())) : (4 + Int((detail * 6).rounded()))
+        let branchSpread = 0.30 + detail * 0.22 // ラジアン。深さに関係なく毎回この角度で開く。
+        let trunkCount = 1 + Int((detail * 3).rounded()) // 1〜4本の幹を扇形内に分散配置。
+        ctx.setLineCap(.round)
+
+        func branch(x: Double, y: Double, angle: Double, len: Double, depth: Int, seed: Double) {
+            if depth > maxDepth || len < R * 0.011 {
+                // 枝先に小さな輝きを添えて、伸びた先が単に途切れるのではなく
+                // 「芽吹いている」ように見せる（キラキラ感の継続）。
+                ctx.saveGState()
+                ctx.setBlendMode(.plusLighter)
+                ctx.setAlpha(0.5)
+                ctx.setFillColor(palette[depth % palette.count])
+                let glowSize = R * 0.012
+                ctx.fillEllipse(in: CGRect(x: x - glowSize / 2, y: y - glowSize / 2, width: glowSize, height: glowSize))
+                ctx.restoreGState()
+                return
+            }
+            let wig = sin(t * 0.8 + Double(depth) * 1.3 + seed) * 0.05
+            let nx = x + cos(angle + wig) * len
+            let ny = y + sin(angle + wig) * len
+            let color = palette[depth % palette.count]
+
+            let path = CGMutablePath()
+            path.move(to: CGPoint(x: x, y: y))
+            path.addLine(to: CGPoint(x: nx, y: ny))
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(max(0.5, Double(maxDepth - depth) * 0.42))
+            ctx.setAlpha(0.78)
+            ctx.setBlendMode(.normal)
+            ctx.addPath(path)
+            ctx.strokePath()
+
+            // depth 0（幹の根元）だけは次の枝を長く伸ばし直す。中心から最初の分岐点までの
+            // 「幹」を短くすることで、中央がまばらにならず、根元近くからすぐ枝分かれが
+            // 始まるようにする（幹を長くしたまま縮小率だけ掛けると中心付近に空白ができる）。
+            let nextLen = depth == 0 ? R * 0.32 : len * (0.68 + 0.06 * sin(seed * 3))
+            for c in 0..<childCount {
+                let spreadFactor = Double(c) - Double(childCount - 1) / 2
+                let childAngle = angle + spreadFactor * branchSpread + sin(seed + Double(c)) * 0.05
+                branch(x: nx, y: ny, angle: childAngle, len: nextLen, depth: depth + 1, seed: seed * 1.618 + Double(c) + 1)
+            }
+        }
+
+        for i in 0..<trunkCount {
+            let trunkAngle = wedgeAngle * (Double(i) + 0.5) / Double(trunkCount)
+            // 根元の幹を短く(中心からすぐ分岐させる)。これが中心付近の疎さの直接の原因だった。
+            branch(x: 0, y: 0, angle: trunkAngle, len: R * (0.10 - Double(i) * 0.006), depth: 0, seed: Double(i) * 7.31 + 1)
+        }
     }
 
     // MARK: - 装飾オーバーレイ

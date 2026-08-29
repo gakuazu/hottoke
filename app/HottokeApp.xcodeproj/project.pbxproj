@@ -26,6 +26,8 @@
 		AB35FCBBBFAABF28D3FD2AA8 /* MotionInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A5938A07E80761EBF73C65 /* MotionInputService.swift */; };
 		D314E9D4FF2970794518AB78 /* KaleidoscopeRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E95B3AB0EFEC6B9A19E4AE5D /* KaleidoscopeRenderer.swift */; };
 		EAACCC444A4B024DD349E524 /* KaleidoscopeCanvasView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58B9BCEED254167D155693B4 /* KaleidoscopeCanvasView.swift */; };
+		EC832A9FB0DA49B49B741E99 /* PatternStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C44D56317BE946A98D1C24D2 /* PatternStyle.swift */; };
+		3B423E837F22410BA57CF705 /* KaleidoscopeDynamics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A580E5307EC4A72B78FD1FA /* KaleidoscopeDynamics.swift */; };
 		EBF98289185B82133A47DADE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */; };
 		ECEAFB9434A38B13A0F0D7C2 /* ManualModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */; };
 		EFEC64F14FDA0497CD9DDF59 /* ActivityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */; };
@@ -67,6 +69,8 @@
 		EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualModeView.swift; sourceTree = "<group>"; };
 		F104140FCD56ACEE96CBBF65 /* KaleidoscopeParameters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeParameters.swift; sourceTree = "<group>"; };
 		F1A5938A07E80761EBF73C65 /* MotionInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionInputService.swift; sourceTree = "<group>"; };
+		C44D56317BE946A98D1C24D2 /* PatternStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternStyle.swift; sourceTree = "<group>"; };
+		4A580E5307EC4A72B78FD1FA /* KaleidoscopeDynamics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeDynamics.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -127,6 +131,7 @@
 				07D8FC6C203F5E542B3D7C10 /* KaleidoscopePalette.swift */,
 				F104140FCD56ACEE96CBBF65 /* KaleidoscopeParameters.swift */,
 				454E3E490F13B82A5BA26920 /* KaleidoscopeTimeline.swift */,
+				C44D56317BE946A98D1C24D2 /* PatternStyle.swift */,
 				75A9F5C9C868F92730497A1A /* TimeOfDay.swift */,
 			);
 			path = Models;
@@ -137,6 +142,7 @@
 			children = (
 				58A98E674A301DE5E3DC44D4 /* GlassShard.swift */,
 				58B9BCEED254167D155693B4 /* KaleidoscopeCanvasView.swift */,
+				4A580E5307EC4A72B78FD1FA /* KaleidoscopeDynamics.swift */,
 				E95B3AB0EFEC6B9A19E4AE5D /* KaleidoscopeRenderer.swift */,
 				6CBA2BDC4AF819F6ED8BF142 /* KaleidoscopeShapeGenerator.swift */,
 				1EF86689186C6913CF05B786 /* SeededGenerator.swift */,
@@ -263,12 +269,14 @@
 				EAACCC444A4B024DD349E524 /* KaleidoscopeCanvasView.swift in Sources */,
 				203659F09B8187B067AC1C15 /* KaleidoscopePalette.swift in Sources */,
 				034EE3673DAEB4711B5B07BA /* KaleidoscopeParameters.swift in Sources */,
+				3B423E837F22410BA57CF705 /* KaleidoscopeDynamics.swift in Sources */,
 				D314E9D4FF2970794518AB78 /* KaleidoscopeRenderer.swift in Sources */,
 				1484809CF3DF25DF724EAD3C /* KaleidoscopeShapeGenerator.swift in Sources */,
 				71818EDF9E18A51E20E94AF7 /* KaleidoscopeTimeline.swift in Sources */,
 				0F58BE6220A48DC8C465532D /* KaleidoscopeVideoExporter.swift in Sources */,
 				ECEAFB9434A38B13A0F0D7C2 /* ManualModeView.swift in Sources */,
 				AB35FCBBBFAABF28D3FD2AA8 /* MotionInputService.swift in Sources */,
+				EC832A9FB0DA49B49B741E99 /* PatternStyle.swift in Sources */,
 				2925F86BF58B2824F09F87A5 /* PhotoLibrarySaver.swift in Sources */,
 				34CDCEF65A478C5FF4220CAD /* RootTabView.swift in Sources */,
 				0F8FD169264FD01FC874054B /* SeededGenerator.swift in Sources */,
