@@ -99,17 +99,47 @@ struct TodayView: View {
                 VideoPlayer(player: queuePlayer)
                     .disabled(true)
             } else if store.isGenerating {
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .tint(.white)
-                    Text("今日のデータから模様を作っています…")
-                        .font(.footnote)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
+                generatingPreview
             } else {
                 Text("模様を準備中です")
                     .foregroundStyle(.white.opacity(0.6))
             }
+        }
+    }
+
+    /// 生成中の待ち時間を「静止したスピナー」ではなく、実際にできあがる模様と同じ
+    /// レンダラーで動く万華鏡プレビューにして、待っている間も動的に見えるようにする。
+    /// パラメータは今日の実データではなくプレースホルダー（現在時刻のパレットのみ反映）で、
+    /// 動画が出来上がり次第 queuePlayer 側の実際の映像に自然に切り替わる。
+    private var generatingPreview: some View {
+        ZStack(alignment: .bottom) {
+            TimelineView(.animation) { timeline in
+                let elapsed = timeline.date.timeIntervalSinceReferenceDate
+                let hour = Calendar.current.component(.hour, from: Date())
+                KaleidoscopeCanvasView(parameters: KaleidoscopeParameters(
+                    symmetryCount: 8,
+                    seed: 777,
+                    palette: .forTimeOfDay(.of(hour: hour)),
+                    rotation: elapsed * 0.35,
+                    pulsePhase: (sin(elapsed * 1.6) + 1) / 2,
+                    deformationIntensity: 0.5,
+                    rotationSpeed: 0.35,
+                    shardDensity: 0.6,
+                    noiseAmount: 0.08,
+                    time: elapsed
+                ))
+            }
+            VStack(spacing: 8) {
+                ProgressView()
+                    .tint(.white)
+                Text("今日のデータから模様を作っています…")
+                    .font(.footnote)
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 28)
+            .padding(.bottom, 20)
+            .background(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.6)], startPoint: .top, endPoint: .bottom))
         }
     }
 
