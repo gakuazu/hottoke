@@ -260,4 +260,11 @@
 
 ### ビルド確認について
 
-コミット・push後、GitHub Actionsで確認する（結果は以下に追記）。
+コミット・pushし、GitHub Actionsで確認したところ**1回目の実行で成功**した。
+- シミュレータ向けビルド（コンパイルが通るかの確認）: 成功
+- ユニットテスト: 成功
+- 実機向けの署名なしビルド・IPA化: 成功
+
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/33250524352
+
+これまでどおり、Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで実機にインストールし直せば、今回の3つの修正が反映される。
