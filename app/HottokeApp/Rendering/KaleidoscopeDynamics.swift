@@ -36,14 +36,41 @@ enum KaleidoscopeDynamics {
     /// ここでは同じ倍率の式を時間で解析的に積分した閉じた式にして、経過時間だけから
     /// 毎回ゼロベースで正しい回転角が求まるようにしている。speedDriftの長期平均は1.1倍になる
     /// ため、その平均で正規化し、`angularSpeed`(ラジアン/秒)を基準速度として素直に使えるようにした。
+    ///
+    /// 注意: この閉じた式は「`angularSpeed`が動画（あるいはプレビュー）を通してずっと一定」で
+    /// あることを前提にした解析的積分であり、`angularSpeed`が時間とともに変化するケースにそのまま
+    /// 使うと、`angularSpeed`が変わった瞬間に正規化係数ごと過去の角度全体がスケールし直されてしまい、
+    /// 隣接フレーム間で回転角が不連続にジャンプする（実機フィードバックで判明した「今日の模様」
+    /// 動画の後半がガタガタする不具合の原因）。手動モードのライブプレビュー（ManualModeView）は
+    /// `angularSpeed`がユーザー操作によるスライダー値でフレームごとに急変しないため、この関数を
+    /// そのまま使い続けて問題ない。一方、「今日の模様」動画書き出し（KaleidoscopeVideoExporter）は
+    /// 活動区間が切り替わるたびにフレーム単位で`angularSpeed`（＝`ActivityStyle.rotationSpeed`）が
+    /// 変化しうるため、この関数ではなく`speedDriftMultiplier(elapsed:)`を使ってフレームごとに
+    /// 角度を数値積算する方式に変更した（KaleidoscopeVideoExporter参照）。
     static func organicRotationAngle(elapsed: Double, angularSpeed: Double) -> Double {
-        func speedDriftIntegral(_ t: Double) -> Double {
-            1.1 * t
-                - (1.3 / 0.22) * cos(0.22 * t)
-                - (0.55 / 0.62) * cos(0.62 * t + 1.1)
-                - (0.3 / 1.4) * cos(1.4 * t + 0.4)
-        }
         let normalized = (speedDriftIntegral(elapsed) - speedDriftIntegral(0)) / 1.1
         return angularSpeed * normalized
+    }
+
+    /// `organicRotationAngle`の閉じた式が前提にしている「瞬間の角速度への倍率」そのもの
+    /// （`speedDriftIntegral`の導関数を、長期平均1.1で正規化したもの。長期平均は1になる）。
+    /// `angularSpeed`が時間とともに変化する場合は、この倍率を使って
+    /// `rotation[i] = rotation[i-1] + angularSpeed(i) * speedDriftMultiplier(elapsed[i]) * dt`
+    /// のようにフレームごとに数値積算することで、`organicRotationAngle`と同じ「呼吸するような
+    /// 加速・減速」の質感を保ったまま、`angularSpeed`の変化にも連続的に追従できる
+    /// （KaleidoscopeVideoExporter参照）。
+    static func speedDriftMultiplier(elapsed: Double) -> Double {
+        let raw = 1.1
+            + 1.3 * sin(0.22 * elapsed)
+            + 0.55 * sin(0.62 * elapsed + 1.1)
+            + 0.3 * sin(1.4 * elapsed + 0.4)
+        return raw / 1.1
+    }
+
+    private static func speedDriftIntegral(_ t: Double) -> Double {
+        1.1 * t
+            - (1.3 / 0.22) * cos(0.22 * t)
+            - (0.55 / 0.62) * cos(0.62 * t + 1.1)
+            - (0.3 / 1.4) * cos(1.4 * t + 0.4)
     }
 }

@@ -20,6 +20,58 @@ struct TodaySummary: Codable, Equatable {
     let videoFileName: String
     let patternStyleRaw: String
     let isManualStyleOverride: Bool
+    /// その日のうちにスタイルを切り替えて既に生成済みの動画ファイル名のキャッシュ
+    /// （PatternStyle.rawValue → ファイル名）。実機フィードバック対応: スタイルを切り替える
+    /// たびに毎回フルで動画を作り直すと待ちが長いという不満を受けて、同じスタイルに
+    /// 戻ってきたときは再生成せずこのキャッシュのファイルを使い回すようにした
+    /// （TodayPatternStore.generateToday参照）。
+    let styleVideoFileNames: [String: String]
+
+    init(
+        dateKey: String,
+        stepCount: Int,
+        distanceMeters: Double,
+        floorsAscended: Int,
+        activeMinutes: Int,
+        dominantKindRaw: String?,
+        videoFileName: String,
+        patternStyleRaw: String,
+        isManualStyleOverride: Bool,
+        styleVideoFileNames: [String: String]
+    ) {
+        self.dateKey = dateKey
+        self.stepCount = stepCount
+        self.distanceMeters = distanceMeters
+        self.floorsAscended = floorsAscended
+        self.activeMinutes = activeMinutes
+        self.dominantKindRaw = dominantKindRaw
+        self.videoFileName = videoFileName
+        self.patternStyleRaw = patternStyleRaw
+        self.isManualStyleOverride = isManualStyleOverride
+        self.styleVideoFileNames = styleVideoFileNames
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case dateKey, stepCount, distanceMeters, floorsAscended, activeMinutes
+        case dominantKindRaw, videoFileName, patternStyleRaw, isManualStyleOverride
+        case styleVideoFileNames
+    }
+
+    // styleVideoFileNamesはこの機能追加より前に永続化された古いJSONには存在しないため、
+    // 欠けていても失敗せず空の辞書として読み込めるようにする（decodeIfPresent）。
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        stepCount = try container.decode(Int.self, forKey: .stepCount)
+        distanceMeters = try container.decode(Double.self, forKey: .distanceMeters)
+        floorsAscended = try container.decode(Int.self, forKey: .floorsAscended)
+        activeMinutes = try container.decode(Int.self, forKey: .activeMinutes)
+        dominantKindRaw = try container.decodeIfPresent(String.self, forKey: .dominantKindRaw)
+        videoFileName = try container.decode(String.self, forKey: .videoFileName)
+        patternStyleRaw = try container.decode(String.self, forKey: .patternStyleRaw)
+        isManualStyleOverride = try container.decode(Bool.self, forKey: .isManualStyleOverride)
+        styleVideoFileNames = try container.decodeIfPresent([String: String].self, forKey: .styleVideoFileNames) ?? [:]
+    }
 }
 
 @MainActor
@@ -54,15 +106,15 @@ final class TodayPatternStore: ObservableObject {
         let key = dateKey(for: Date())
 
         if let existing = loadPersistedSummary(), existing.dateKey == key {
+            summary = existing
             let url = documentsDirectory.appendingPathComponent(existing.videoFileName)
             if FileManager.default.fileExists(atPath: url.path) {
-                summary = existing
                 videoURL = url
                 return
             }
         }
 
-        await generateToday(dateKey: key)
+        await generateToday(dateKey: key, clearStyleCache: true)
     }
 
     /// アプリを再度前面に戻したときなどに呼ぶ。日付が変わっていれば新しい日として生成し直し、
@@ -72,44 +124,56 @@ final class TodayPatternStore: ObservableObject {
     /// その日のうちにユーザーが手動でスタイルを選んでいた場合（existing.isManualStyleOverride）は、
     /// 活動量が変わって作り直す場合でも自動選択に戻さず、選んだスタイルを引き継ぐ
     /// （「アプリを開き直したら勝手にスタイルが変わった」という不満につながらないように）。
+    ///
+    /// 活動データが変化して作り直す場合、その日のうちに他のスタイルで生成済みのキャッシュ動画は
+    /// 古いデータのままになってしまうため、キャッシュは全部クリアして選択中のスタイルだけ
+    /// 最新データで再生成する（他のスタイルは、ユーザーが再度選び直した時点で作り直される）。
     func refreshIfStale() async {
         guard !isGenerating else { return }
         let key = dateKey(for: Date())
 
         guard let existing = summary else {
-            await generateToday(dateKey: key)
+            await generateToday(dateKey: key, clearStyleCache: true)
             return
         }
         if existing.dateKey != key {
             // 日付が変わったので手動指定は引き継がず、自動選択にリセットする。
-            await generateToday(dateKey: key)
+            await generateToday(dateKey: key, clearStyleCache: true)
             return
         }
         let data = await activityService.fetchToday()
         if hasMeaningfulChange(from: existing, to: data) {
             let carryOverStyle = existing.isManualStyleOverride ? PatternStyle(rawValue: existing.patternStyleRaw) : nil
-            await generateToday(dateKey: key, prefetchedData: data, styleOverride: carryOverStyle)
+            await generateToday(dateKey: key, prefetchedData: data, styleOverride: carryOverStyle, clearStyleCache: true)
         }
     }
 
     /// ユーザーが手動で更新ボタンを押したときに呼ぶ。変化の有無に関わらず必ず最新データで作り直す。
     /// その日のうちに手動でスタイルを選んでいた場合は、そのスタイルのまま作り直す
     /// （スタイル選択自体をやり直したい場合は`forceRefresh(styleOverride:)`を使う）。
+    /// 「必ず作り直す」操作のため、他のスタイルのキャッシュ動画も古いデータのままになるのを
+    /// 避けるべくキャッシュは全部クリアし、選択中のスタイルだけ作り直す。
     func forceRefresh() async {
         guard !isGenerating else { return }
         let key = dateKey(for: Date())
         let carryOverStyle: PatternStyle? = (summary?.dateKey == key && summary?.isManualStyleOverride == true)
             ? summary.flatMap { PatternStyle(rawValue: $0.patternStyleRaw) }
             : nil
-        await generateToday(dateKey: key, styleOverride: carryOverStyle)
+        await generateToday(dateKey: key, styleOverride: carryOverStyle, clearStyleCache: true)
     }
 
     /// 「今日の模様」画面でユーザーが試しにスタイルを選んだ（または自動選択に戻した）ときに呼ぶ。
     /// - Parameter styleOverride: 明示的に使いたいスタイル。`nil`を渡すと自動選択（活動データから
-    ///   決まるスタイル）に戻す。いずれの場合も最新データで作り直す。
+    ///   決まるスタイル）に戻す。
+    ///
+    /// 実機フィードバック対応: 試しにスタイルを見比べる操作のたびに毎回フルで動画を作り直すと
+    /// 待ちが長いため、その日のうちに同じスタイルで生成済みの動画があり、かつ生成時から活動量が
+    /// 変化していなければ再生成せずそのファイルをそのまま使う（generateToday内のキャッシュ判定）。
+    /// まだ生成していないスタイルの場合はこれまで通り生成し、その結果をキャッシュに追加する
+    /// （他のスタイルの既存キャッシュは消さずに残す）。
     func forceRefresh(styleOverride: PatternStyle?) async {
         guard !isGenerating else { return }
-        await generateToday(dateKey: dateKey(for: Date()), styleOverride: styleOverride)
+        await generateToday(dateKey: dateKey(for: Date()), styleOverride: styleOverride, clearStyleCache: false)
     }
 
     private func hasMeaningfulChange(from existing: TodaySummary, to data: DailyActivityData) -> Bool {
@@ -118,9 +182,20 @@ final class TodayPatternStore: ObservableObject {
             || Int(data.totalActiveSeconds / 60) != existing.activeMinutes
     }
 
-    /// - Parameter styleOverride: 明示的に使うスタイル。`nil`なら`data.dominantMovingKind`から
-    ///   自動選択する（従来通り）。指定があれば、そのスタイルが「手動指定」として保存される。
-    private func generateToday(dateKey key: String, prefetchedData: DailyActivityData? = nil, styleOverride: PatternStyle? = nil) async {
+    /// - Parameters:
+    ///   - styleOverride: 明示的に使うスタイル。`nil`なら`data.dominantMovingKind`から
+    ///     自動選択する（従来通り）。指定があれば、そのスタイルが「手動指定」として保存される。
+    ///   - clearStyleCache: `true`の場合、その日のうちに生成済みの他スタイルのキャッシュ動画は
+    ///     すべて破棄し（ファイルも削除し）、今回生成するスタイルだけを残す。データが変わった
+    ///     可能性がある更新（refreshIfStale/forceRefresh）で使う。`false`の場合は既存のキャッシュを
+    ///     維持したまま、指定スタイルがキャッシュ済みならそれを再利用し、未生成ならキャッシュに
+    ///     追加する（スタイルを試しに切り替える操作 forceRefresh(styleOverride:) で使う）。
+    private func generateToday(
+        dateKey key: String,
+        prefetchedData: DailyActivityData? = nil,
+        styleOverride: PatternStyle? = nil,
+        clearStyleCache: Bool
+    ) async {
         isGenerating = true
         errorMessage = nil
         defer { isGenerating = false }
@@ -132,16 +207,64 @@ final class TodayPatternStore: ObservableObject {
             data = await activityService.fetchToday()
         }
 
-        // 同じ日のうちに更新で再生成する場合でもファイル名を毎回変える（末尾に生成時刻を付与）。
-        // ファイル名を固定すると再生成してもvideoURLが同じ値になり、TodayView側の
-        // onChange(of: store.videoURL)が変化を検知できず動画プレイヤーが更新されないため。
-        let previousFileName = summary?.dateKey == key ? summary?.videoFileName : nil
-        let fileName = "today-\(key)-\(Int(Date().timeIntervalSince1970)).mp4"
+        let resolvedStyle = styleOverride ?? data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
+        let previousSummary = summary
+
+        // キャッシュ利用判定: 全部作り直す操作ではなく、同じ日で、かつ前回生成時から活動データに
+        // 意味のある変化がなく、そのスタイルの動画がすでに生成済み（ファイルも実在）なら、
+        // 再生成せずそのファイルをそのまま使い回す。
+        if !clearStyleCache,
+           let previousSummary,
+           previousSummary.dateKey == key,
+           !hasMeaningfulChange(from: previousSummary, to: data),
+           let cachedFileName = previousSummary.styleVideoFileNames[resolvedStyle.rawValue] {
+            let cachedURL = documentsDirectory.appendingPathComponent(cachedFileName)
+            if FileManager.default.fileExists(atPath: cachedURL.path) {
+                let newSummary = TodaySummary(
+                    dateKey: key,
+                    stepCount: previousSummary.stepCount,
+                    distanceMeters: previousSummary.distanceMeters,
+                    floorsAscended: previousSummary.floorsAscended,
+                    activeMinutes: previousSummary.activeMinutes,
+                    dominantKindRaw: previousSummary.dominantKindRaw,
+                    videoFileName: cachedFileName,
+                    patternStyleRaw: resolvedStyle.rawValue,
+                    isManualStyleOverride: styleOverride != nil,
+                    styleVideoFileNames: previousSummary.styleVideoFileNames
+                )
+                persist(summary: newSummary)
+                summary = newSummary
+                videoURL = cachedURL
+                return
+            }
+        }
+
+        // ここからは実際に動画を生成する。日付が変わった場合や、全部作り直す操作の場合は、
+        // 不要になる古いキャッシュ動画をディスクに残さないよう先に削除しておく
+        // （同じ日でキャッシュを維持する場合＝スタイル切り替えでの新規生成は、他スタイルの
+        // 既存ファイルは消さずそのまま残す）。
+        if let previousSummary, previousSummary.dateKey != key || clearStyleCache {
+            deleteAllCachedFiles(for: previousSummary)
+        }
+
+        // 動画ファイル名にスタイルを含める（同じスタイルへのキャッシュ判定に使うため）。
+        // 生成時刻も含めているのは、同じスタイルを再生成した場合でもファイル名を変えることで
+        // videoURLの値が変わり、TodayView側のonChange(of: store.videoURL)で動画プレイヤーの
+        // 更新を検知できるようにするため。
+        let fileName = "today-\(key)-\(resolvedStyle.rawValue)-\(Int(Date().timeIntervalSince1970)).mp4"
         let outputURL = documentsDirectory.appendingPathComponent(fileName)
 
         do {
             try await exporter.exportDailyPattern(data: data, to: outputURL, styleOverride: styleOverride)
-            let resolvedStyle = styleOverride ?? data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
+
+            var styleCache: [String: String]
+            if clearStyleCache || previousSummary?.dateKey != key {
+                styleCache = [:]
+            } else {
+                styleCache = previousSummary?.styleVideoFileNames ?? [:]
+            }
+            styleCache[resolvedStyle.rawValue] = fileName
+
             let newSummary = TodaySummary(
                 dateKey: key,
                 stepCount: data.stepCount,
@@ -151,16 +274,25 @@ final class TodayPatternStore: ObservableObject {
                 dominantKindRaw: data.dominantMovingKind?.rawValue,
                 videoFileName: fileName,
                 patternStyleRaw: resolvedStyle.rawValue,
-                isManualStyleOverride: styleOverride != nil
+                isManualStyleOverride: styleOverride != nil,
+                styleVideoFileNames: styleCache
             )
             persist(summary: newSummary)
             summary = newSummary
             videoURL = outputURL
-            if let previousFileName {
-                try? FileManager.default.removeItem(at: documentsDirectory.appendingPathComponent(previousFileName))
-            }
         } catch {
             errorMessage = "模様の生成に失敗しました: \(error.localizedDescription)"
+        }
+    }
+
+    /// 指定したサマリーが参照している動画ファイル（現在表示中のもの＋スタイルキャッシュ全部）を
+    /// ディスクから削除する。日付が変わったときや、キャッシュを全部クリアするときに使う
+    /// （ストレージを圧迫しないようにするため）。
+    private func deleteAllCachedFiles(for summary: TodaySummary) {
+        var fileNames = Set(summary.styleVideoFileNames.values)
+        fileNames.insert(summary.videoFileName)
+        for fileName in fileNames {
+            try? FileManager.default.removeItem(at: documentsDirectory.appendingPathComponent(fileName))
         }
     }
 

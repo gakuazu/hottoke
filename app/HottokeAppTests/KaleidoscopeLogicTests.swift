@@ -69,6 +69,102 @@ final class KaleidoscopeLogicTests: XCTestCase {
         XCTAssertTrue(frames.allSatisfy { $0.activityKind == .stationary })
     }
 
+    /// 実機フィードバック対応: 動画終盤で模様が震えるようにガタガタする不具合の再発防止テスト。
+    /// 活動区間が頻繁に切り替わる（短い区間が10個以上連続する）ダミーデータを与えても、
+    /// KaleidoscopeVideoExporter.buildParametersTimeline が返すフレームごとのパラメータ
+    /// （回転速度・density系パラメータ・回転角）がフレーム間で滑らかに変化することを確認する。
+    func testVideoParametersStaySmoothAcrossFrequentActivitySwitches() {
+        let calendar = Calendar(identifier: .gregorian)
+        var startOfDay = calendar.startOfDay(for: Date())
+        // 一応、活動データの開始を少し朝側にずらしておく（0時ちょうど固有の丸め誤差を避ける）。
+        startOfDay = startOfDay.addingTimeInterval(6 * 3600)
+
+        // 「静止」と「走行」を10分刻みで14回、交互に切り替える短い区間を作る。
+        // rotationSpeedはstationary(0.06)とrunning(0.5)で約8倍差があり、これが動画の
+        // 各所（タイムライン圧縮の都合で動画終盤に集中しやすい）でフレームごとに切り替わる。
+        var segments: [ActivitySegment] = []
+        var cursor = startOfDay
+        for i in 0..<14 {
+            let kind: ActivityKind = i % 2 == 0 ? .stationary : .running
+            let next = cursor.addingTimeInterval(10 * 60)
+            segments.append(ActivitySegment(start: cursor, end: next, kind: kind))
+            cursor = next
+        }
+
+        let data = DailyActivityData(
+            date: startOfDay,
+            segments: segments,
+            stepCount: 8000,
+            distanceMeters: 5000,
+            floorsAscended: 5,
+            floorAscendTimes: []
+        )
+
+        let fps: Int32 = 24
+        let duration: Double = 28
+        let frameCount = Int(duration * Double(fps))
+        let keyframes = KaleidoscopeTimelineBuilder.buildKeyframes(from: data, frameCount: frameCount)
+        XCTAssertEqual(keyframes.count, frameCount)
+
+        // 区間境界が実際にフレーム単位で複数回切り替わっていることを確認しておく
+        // （このテストが意味のある入力になっているかの前提チェック）。
+        var switchCount = 0
+        for index in 1..<keyframes.count where keyframes[index].activityKind != keyframes[index - 1].activityKind {
+            switchCount += 1
+        }
+        XCTAssertGreaterThanOrEqual(switchCount, 10, "テストデータの活動区間の切り替わりが少なすぎます")
+
+        let timeline = KaleidoscopeVideoExporter.buildParametersTimeline(
+            keyframes: keyframes,
+            data: data,
+            seed: 1,
+            duration: duration,
+            fps: fps,
+            patternStyle: .fractal
+        )
+        XCTAssertEqual(timeline.count, frameCount)
+
+        // 平滑化前（生の活動区間由来の値）なら、区間境界の前後1フレームだけで
+        // rotationSpeedが0.06→0.5（差0.44）のように瞬時にジャンプしうる。
+        // 平滑化後はどの隣接フレーム間でもその何分の1かに収まっているはず。
+        let rawRotationSpeeds = keyframes.map { ActivityStyle.style(for: $0.activityKind).rotationSpeed }
+        let maxRawJump = maxAdjacentAbsoluteDifference(rawRotationSpeeds)
+        XCTAssertGreaterThan(maxRawJump, 0.3, "テストデータ自体に急激なrotationSpeedの変化がない")
+
+        let smoothedRotationSpeeds = timeline.map(\.rotationSpeed)
+        let maxSmoothedJump = maxAdjacentAbsoluteDifference(smoothedRotationSpeeds)
+        XCTAssertLessThan(maxSmoothedJump, maxRawJump / 4, "rotationSpeedが平滑化されずフレーム間で急変している")
+
+        let deformations = timeline.map(\.deformationIntensity)
+        XCTAssertLessThan(maxAdjacentAbsoluteDifference(deformations), 0.15, "deformationIntensity(密度)がフレーム間で急変している")
+
+        let noiseAmounts = timeline.map(\.noiseAmount)
+        XCTAssertLessThan(maxAdjacentAbsoluteDifference(noiseAmounts), 0.05, "noiseAmountがフレーム間で急変している")
+
+        // 回転角そのものも、隣接フレーム間の増分（＝そのフレームでの実質的な角速度）が
+        // さらにその前の増分から急激にジャンプしないことを確認する。
+        // 角速度が一定という前提の閉じた式をそのまま使っていた旧実装では、activityKindが
+        // 切り替わった瞬間にこの増分が数倍〜十数倍ジャンプしうる。
+        let rotations = timeline.map(\.rotation)
+        var steps: [Double] = []
+        steps.reserveCapacity(rotations.count - 1)
+        for index in 1..<rotations.count {
+            steps.append(rotations[index] - rotations[index - 1])
+        }
+        let maxStepJump = maxAdjacentAbsoluteDifference(steps)
+        XCTAssertLessThan(maxStepJump, 0.02, "回転角の増分（フレームごとの実質角速度）が急変しており、震えの原因になりうる")
+    }
+
+    /// 隣接する要素同士の絶対差の最大値（フレーム間の急変=ジャンプがないかを見るのに使う）。
+    private func maxAdjacentAbsoluteDifference(_ values: [Double]) -> Double {
+        guard values.count > 1 else { return 0 }
+        var maxDiff = 0.0
+        for index in 1..<values.count {
+            maxDiff = max(maxDiff, abs(values[index] - values[index - 1]))
+        }
+        return maxDiff
+    }
+
     func testDominantMovingKindIgnoresStationary() {
         let now = Date()
         let data = DailyActivityData(
