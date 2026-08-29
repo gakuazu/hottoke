@@ -453,6 +453,6 @@ Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで�
 - ユニットテスト: 成功
 - 実機向けの署名なしビルド・IPA化: 成功
 
-実行結果: https://github.com/gakuazu/hottoke/actions/runs/RUN_ID_PLACEHOLDER
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/33279882798
 
 これまでどおり、Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで実機にインストールし直せば、手動モード・「今日の模様」画面で新しい5つのスタイル（ひび割れ・リサージュ・トゥルーシェ・モアレ格子・花模様）が選べるようになる（トゥルーシェ・モアレ格子・花模様には鍵マークが付いていて選べない状態になっているのが正常）。
