@@ -31,6 +31,9 @@
 		EBF98289185B82133A47DADE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */; };
 		ECEAFB9434A38B13A0F0D7C2 /* ManualModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */; };
 		EFEC64F14FDA0497CD9DDF59 /* ActivityKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */; };
+		111C9AE217BF4BE4A2B4F84D /* ArchivePatternStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A90B92C3943443C39AABE417 /* ArchivePatternStore.swift */; };
+		801EF1D1BE434AAB8EEA3681 /* CalendarArchiveView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06A297883B13424F98F0C96A /* CalendarArchiveView.swift */; };
+		08758125F5E84F299B2B3460 /* ArchiveDayDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5453617E3CDD4AF9A322CEFD /* ArchiveDayDetailView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,6 +74,9 @@
 		F1A5938A07E80761EBF73C65 /* MotionInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MotionInputService.swift; sourceTree = "<group>"; };
 		C44D56317BE946A98D1C24D2 /* PatternStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatternStyle.swift; sourceTree = "<group>"; };
 		4A580E5307EC4A72B78FD1FA /* KaleidoscopeDynamics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KaleidoscopeDynamics.swift; sourceTree = "<group>"; };
+		A90B92C3943443C39AABE417 /* ArchivePatternStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivePatternStore.swift; sourceTree = "<group>"; };
+		06A297883B13424F98F0C96A /* CalendarArchiveView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarArchiveView.swift; sourceTree = "<group>"; };
+		5453617E3CDD4AF9A322CEFD /* ArchiveDayDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchiveDayDetailView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -98,6 +104,8 @@
 		42109D847158A191BF8C1DBD /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				5453617E3CDD4AF9A322CEFD /* ArchiveDayDetailView.swift */,
+				06A297883B13424F98F0C96A /* CalendarArchiveView.swift */,
 				EDC042EFAB3D4223CFCAAD78 /* ManualModeView.swift */,
 				90AD8A2DAFB533C4C4C440EF /* RootTabView.swift */,
 				74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */,
@@ -154,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				0DB0F57EF8D6CF642042DFE0 /* ActivityDataService.swift */,
+				A90B92C3943443C39AABE417 /* ArchivePatternStore.swift */,
 				9F9A4078225EBCF8BBD539A3 /* KaleidoscopeVideoExporter.swift */,
 				F1A5938A07E80761EBF73C65 /* MotionInputService.swift */,
 				588C2E0E9873223419F76C84 /* PhotoLibrarySaver.swift */,
@@ -263,6 +272,9 @@
 			files = (
 				6977DEAF0A5C68729336B5E7 /* ActivityDataService.swift in Sources */,
 				EFEC64F14FDA0497CD9DDF59 /* ActivityKind.swift in Sources */,
+				111C9AE217BF4BE4A2B4F84D /* ArchivePatternStore.swift in Sources */,
+				08758125F5E84F299B2B3460 /* ArchiveDayDetailView.swift in Sources */,
+				801EF1D1BE434AAB8EEA3681 /* CalendarArchiveView.swift in Sources */,
 				143C487817303E843191F386 /* DailyActivityData.swift in Sources */,
 				49B2D3F78A6C8654BECDDEBF /* GlassShard.swift in Sources */,
 				15C9B8D250A22A253149B4F4 /* HottokeApp.swift in Sources */,

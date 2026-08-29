@@ -13,18 +13,33 @@ final class ActivityDataService {
     private let pedometer = CMPedometer()
 
     func fetchToday() async -> DailyActivityData {
+        await fetch(for: Date())
+    }
+
+    /// 指定した日の0時〜（今日ならその時点の現在時刻まで、過去の日ならその日の24時まで）の
+    /// 活動データを取得する。過去の日を渡した場合に「アーカイブ」機能から呼ばれる想定。
+    ///
+    /// 技術メモ（重要な制約）: CMMotionActivityManagerがOS側に保持している活動履歴は、
+    /// 目安で数日〜1週間程度しか遡れない。保持期間より前の日を指定した場合はエラーにはならず、
+    /// 単に空の活動区間・0の歩数が返ってくる（＝「静けさの模様」相当のデータになる）。
+    /// 「その日のデータがもう端末に残っていないため今から作れない」という判定自体は、
+    /// 呼び出し側（ArchivePatternStore.isGeneratable）が日付の新しさだけで簡易的に行う。
+    func fetch(for date: Date) async -> DailyActivityData {
         let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
         let now = Date()
-        let startOfDay = calendar.startOfDay(for: now)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        // 対象日が今日なら現在時刻まで、過去の日ならその日の24時までを取得範囲とする。
+        let end = min(endOfDay, now)
 
         let segments: [ActivitySegment]
         if CMMotionActivityManager.isActivityAvailable() {
-            segments = await queryActivitySegments(from: startOfDay, to: now)
+            segments = await queryActivitySegments(from: startOfDay, to: end)
         } else {
             segments = []
         }
 
-        let (steps, distance, floors) = await queryPedometerTotals(from: startOfDay, to: now)
+        let (steps, distance, floors) = await queryPedometerTotals(from: startOfDay, to: end)
 
         return DailyActivityData(
             date: startOfDay,
