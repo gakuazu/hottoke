@@ -360,4 +360,12 @@ Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで�
 
 ### ビルド確認について
 
-（コミット・push後、GitHub Actionsでの結果をこの下に追記する）
+コミット・pushし、GitHub Actionsで確認したところ**1回目の実行で成功**した（新しく追加した3つのファイルをXcodeプロジェクトに登録する作業も含めて問題なし）。
+
+- シミュレータ向けビルド（コンパイルが通るかの確認）: 成功
+- ユニットテスト: 成功
+- 実機向けの署名なしビルド・IPA化: 成功
+
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/33253063627
+
+これまでどおり、Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで実機にインストールし直せば、今回追加した「アーカイブ」タブが使えるようになる。
