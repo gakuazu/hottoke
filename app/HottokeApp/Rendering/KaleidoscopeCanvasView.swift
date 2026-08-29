@@ -22,6 +22,18 @@ import UIKit
 /// このキャッシュはUIViewのインスタンスに閉じた状態であり、`KaleidoscopeRenderer`自体は
 /// 状態を持たない（動画書き出し側KaleidoscopeVideoExporterは毎フレーム明示的に異なる
 /// `time`を指定して`KaleidoscopeRenderer.render`を直接呼ぶため、このキャッシュの影響を受けない）。
+///
+/// 追加の非同期化（実機フィードバック対応）:
+/// 「waves（波の干渉）スタイルだけ周期的にカクつく」という実機報告への対処。waves は
+/// 4スタイルの中でもとりわけ重く（輪スロット最大14本×輪ごと220点サンプリング×
+/// 帯塗り+ストローク2回+きらめきループ）、55msごとの再生成1回分がメインスレッドの
+/// 描画を同期的にブロックしてしまうと、waves のようなスタイルではその瞬間だけ
+/// ワンテンポ詰まりコマ落ちとして体感されてしまう。そこで扇形の再生成自体は
+/// `DispatchQueue.global(qos: .userInteractive)`上で行い、完了したらメインスレッドで
+/// キャッシュ画像を差し替えて`setNeedsDisplay()`する形に変更した。`draw(_:)`は常に
+/// 「その時点でキャッシュにある画像」を使って即座に描画し、再生成の完了を待たない
+/// （多少古い画像のままでもコマ落ちさせないことを優先する）。二重に同時実行が
+/// 走らないよう`isRegeneratingWedge`フラグで多重起動を防いでいる。
 final class KaleidoscopeUIView: UIView {
     /// 扇形の中身を再生成する最小間隔（プロトタイプのWEDGE_INTERVALと同じ55ms）。
     private static let wedgeRegenerationInterval: Double = 0.055
@@ -50,6 +62,13 @@ final class KaleidoscopeUIView: UIView {
 
     private var cachedWedgeKey: WedgeCacheKey?
     private var cachedWedgeImage: CGImage?
+    /// 現在バックグラウンドで扇形を再生成中かどうか。多重起動防止用（メインスレッドでのみ読み書き）。
+    private var isRegeneratingWedge = false
+    /// 再生成中に別のパラメータへ変わった場合に備え、直近に要求されたキーを覚えておく。
+    /// 再生成完了時にこれと食い違っていれば、そのままもう一度バックグラウンド再生成を予約する。
+    private var pendingRegenerationKey: WedgeCacheKey?
+
+    private static let regenerationQueue = DispatchQueue(label: "com.gakuazu.hottoke.kaleidoscope-wedge", qos: .userInteractive)
 
     var parameters: KaleidoscopeParameters = KaleidoscopeParameters() {
         didSet { setNeedsDisplay() }
@@ -71,26 +90,50 @@ final class KaleidoscopeUIView: UIView {
         ctx.saveGState()
 
         let key = WedgeCacheKey(parameters: parameters, size: rect.size)
-        let wedgeImage: CGImage?
-        if key == cachedWedgeKey, let cachedWedgeImage {
-            // 55ms未満しか経っておらず、内容に関わるパラメータも変わっていないので、
-            // 重い再生成をスキップしてキャッシュ済みの扇形ビットマップを使い回す。
-            wedgeImage = cachedWedgeImage
-        } else {
-            wedgeImage = KaleidoscopeRenderer.renderWedgeImage(size: rect.size, parameters: parameters)
-            cachedWedgeKey = key
-            cachedWedgeImage = wedgeImage
+        if key != cachedWedgeKey {
+            // 内容に関わるパラメータが変わった（55ms経過含む）ので再生成が必要だが、
+            // メインスレッドをブロックしないようバックグラウンドで行う。draw(_:)自体は
+            // 待たずに、その時点でキャッシュにある画像（多少古くても構わない）で即座に描く。
+            requestWedgeRegeneration(key: key, parameters: parameters, size: rect.size)
         }
 
-        if let wedgeImage {
+        if let wedgeImage = cachedWedgeImage {
             KaleidoscopeRenderer.stampWedge(wedgeImage, into: ctx, size: rect.size, parameters: parameters)
         } else {
-            // 扇形が生成できなかった場合でも描画ループ自体は止めない（docs/03b 安全設計）。
+            // まだ一度も扇形が生成できていない場合（初回フレームなど）でも
+            // 描画ループ自体は止めない（docs/03b 安全設計）。
             ctx.setFillColor(CGColor(red: 0.02, green: 0.02, blue: 0.04, alpha: 1))
             ctx.fill(rect)
         }
 
         ctx.restoreGState()
+    }
+
+    /// 扇形の再生成をバックグラウンドキューに投げる。すでに再生成中の場合は多重起動せず、
+    /// 代わりに「再生成完了後にもう一度このキーで作り直す必要がある」ことだけ覚えておく。
+    private func requestWedgeRegeneration(key: WedgeCacheKey, parameters: KaleidoscopeParameters, size: CGSize) {
+        guard !isRegeneratingWedge else {
+            pendingRegenerationKey = key
+            return
+        }
+        isRegeneratingWedge = true
+        pendingRegenerationKey = nil
+
+        Self.regenerationQueue.async { [weak self] in
+            let image = KaleidoscopeRenderer.renderWedgeImage(size: size, parameters: parameters)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.cachedWedgeKey = key
+                self.cachedWedgeImage = image
+                self.isRegeneratingWedge = false
+                self.setNeedsDisplay()
+
+                // 再生成中に別のパラメータへ進んでいた場合、そのキーで改めて再生成を予約する。
+                if let pendingKey = self.pendingRegenerationKey, pendingKey != key {
+                    self.requestWedgeRegeneration(key: pendingKey, parameters: self.parameters, size: size)
+                }
+            }
+        }
     }
 }
 

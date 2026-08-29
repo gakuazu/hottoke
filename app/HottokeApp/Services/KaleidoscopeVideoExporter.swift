@@ -16,7 +16,10 @@ final class KaleidoscopeVideoExporter {
     private let fps: Int32 = 24
     private let duration: Double = 28 // 秒（spec 3.1節「目安30秒前後」）
 
-    func exportDailyPattern(data: DailyActivityData, to outputURL: URL) async throws {
+    /// - Parameter styleOverride: 明示的に使うスタイルを指定する場合に渡す（「今日の模様」画面で
+    ///   ユーザーが試しにスタイルを選び直した場合）。`nil`なら従来通り`data.dominantMovingKind`
+    ///   から自動選択する。
+    func exportDailyPattern(data: DailyActivityData, to outputURL: URL, styleOverride: PatternStyle? = nil) async throws {
         let frameCount = max(1, Int(duration * Double(fps)))
         let keyframes = KaleidoscopeTimelineBuilder.buildKeyframes(from: data, frameCount: frameCount)
 
@@ -53,7 +56,8 @@ final class KaleidoscopeVideoExporter {
         // 決める（docs/02-spec.md参照）。時間帯やセグメントが変わるたびにスタイル自体が
         // 切り替わると忙しない見た目になるため、スタイルは動画を通して固定し、密度・複雑さ
         // (detail)の方をセグメントごとの活動の強さで変化させる（parameters(for:)内）。
-        let patternStyle = data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
+        // styleOverrideが指定されていればそちらを優先する（ユーザーが試しにスタイルを選んだ場合）。
+        let patternStyle = styleOverride ?? data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             var frameIndex = 0

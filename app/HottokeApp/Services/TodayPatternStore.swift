@@ -5,6 +5,11 @@ import Foundation
 /// 実際に使うと「時間が経って活動したのに更新されない」という不満につながったため、
 /// アプリを開き直した際に前回確定時から活動量（歩数など）が変化していれば
 /// 自動で作り直すよう変更した（refreshIfStale）。加えて手動での更新も可能にした（forceRefresh）。
+///
+/// 実機フィードバック対応: 手動モードのように「今日の模様」でも試しにスタイルを変えられるように
+/// なったため、実際に使われたスタイル（patternStyleRaw）と、それがユーザーによる明示的な指定か
+/// どうか（isManualStyleOverride）も保存する。手動指定の場合はその日のうちは自動選択に
+/// 上書きされないようにするため（TodayPatternStore.refreshIfStale/forceRefresh参照）。
 struct TodaySummary: Codable, Equatable {
     let dateKey: String
     let stepCount: Int
@@ -13,6 +18,8 @@ struct TodaySummary: Codable, Equatable {
     let activeMinutes: Int
     let dominantKindRaw: String?
     let videoFileName: String
+    let patternStyleRaw: String
+    let isManualStyleOverride: Bool
 }
 
 @MainActor
@@ -61,6 +68,10 @@ final class TodayPatternStore: ObservableObject {
     /// アプリを再度前面に戻したときなどに呼ぶ。日付が変わっていれば新しい日として生成し直し、
     /// 同じ日でも前回確定時から歩数などの活動量が変化していれば最新のデータで模様を更新する。
     /// 変化がなければ何もしない（動画の再書き出しは軽くない処理のため、無駄に毎回は行わない）。
+    ///
+    /// その日のうちにユーザーが手動でスタイルを選んでいた場合（existing.isManualStyleOverride）は、
+    /// 活動量が変わって作り直す場合でも自動選択に戻さず、選んだスタイルを引き継ぐ
+    /// （「アプリを開き直したら勝手にスタイルが変わった」という不満につながらないように）。
     func refreshIfStale() async {
         guard !isGenerating else { return }
         let key = dateKey(for: Date())
@@ -70,19 +81,35 @@ final class TodayPatternStore: ObservableObject {
             return
         }
         if existing.dateKey != key {
+            // 日付が変わったので手動指定は引き継がず、自動選択にリセットする。
             await generateToday(dateKey: key)
             return
         }
         let data = await activityService.fetchToday()
         if hasMeaningfulChange(from: existing, to: data) {
-            await generateToday(dateKey: key, prefetchedData: data)
+            let carryOverStyle = existing.isManualStyleOverride ? PatternStyle(rawValue: existing.patternStyleRaw) : nil
+            await generateToday(dateKey: key, prefetchedData: data, styleOverride: carryOverStyle)
         }
     }
 
     /// ユーザーが手動で更新ボタンを押したときに呼ぶ。変化の有無に関わらず必ず最新データで作り直す。
+    /// その日のうちに手動でスタイルを選んでいた場合は、そのスタイルのまま作り直す
+    /// （スタイル選択自体をやり直したい場合は`forceRefresh(styleOverride:)`を使う）。
     func forceRefresh() async {
         guard !isGenerating else { return }
-        await generateToday(dateKey: dateKey(for: Date()))
+        let key = dateKey(for: Date())
+        let carryOverStyle: PatternStyle? = (summary?.dateKey == key && summary?.isManualStyleOverride == true)
+            ? summary.flatMap { PatternStyle(rawValue: $0.patternStyleRaw) }
+            : nil
+        await generateToday(dateKey: key, styleOverride: carryOverStyle)
+    }
+
+    /// 「今日の模様」画面でユーザーが試しにスタイルを選んだ（または自動選択に戻した）ときに呼ぶ。
+    /// - Parameter styleOverride: 明示的に使いたいスタイル。`nil`を渡すと自動選択（活動データから
+    ///   決まるスタイル）に戻す。いずれの場合も最新データで作り直す。
+    func forceRefresh(styleOverride: PatternStyle?) async {
+        guard !isGenerating else { return }
+        await generateToday(dateKey: dateKey(for: Date()), styleOverride: styleOverride)
     }
 
     private func hasMeaningfulChange(from existing: TodaySummary, to data: DailyActivityData) -> Bool {
@@ -91,7 +118,9 @@ final class TodayPatternStore: ObservableObject {
             || Int(data.totalActiveSeconds / 60) != existing.activeMinutes
     }
 
-    private func generateToday(dateKey key: String, prefetchedData: DailyActivityData? = nil) async {
+    /// - Parameter styleOverride: 明示的に使うスタイル。`nil`なら`data.dominantMovingKind`から
+    ///   自動選択する（従来通り）。指定があれば、そのスタイルが「手動指定」として保存される。
+    private func generateToday(dateKey key: String, prefetchedData: DailyActivityData? = nil, styleOverride: PatternStyle? = nil) async {
         isGenerating = true
         errorMessage = nil
         defer { isGenerating = false }
@@ -111,7 +140,8 @@ final class TodayPatternStore: ObservableObject {
         let outputURL = documentsDirectory.appendingPathComponent(fileName)
 
         do {
-            try await exporter.exportDailyPattern(data: data, to: outputURL)
+            try await exporter.exportDailyPattern(data: data, to: outputURL, styleOverride: styleOverride)
+            let resolvedStyle = styleOverride ?? data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
             let newSummary = TodaySummary(
                 dateKey: key,
                 stepCount: data.stepCount,
@@ -119,7 +149,9 @@ final class TodayPatternStore: ObservableObject {
                 floorsAscended: data.floorsAscended,
                 activeMinutes: Int(data.totalActiveSeconds / 60),
                 dominantKindRaw: data.dominantMovingKind?.rawValue,
-                videoFileName: fileName
+                videoFileName: fileName,
+                patternStyleRaw: resolvedStyle.rawValue,
+                isManualStyleOverride: styleOverride != nil
             )
             persist(summary: newSummary)
             summary = newSummary

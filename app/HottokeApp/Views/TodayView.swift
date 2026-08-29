@@ -28,6 +28,7 @@ struct TodayView: View {
 
                     if let summary = store.summary {
                         statsRow(summary)
+                        styleSelectionRow(summary)
                     }
 
                     if let errorMessage = store.errorMessage {
@@ -217,14 +218,78 @@ struct TodayView: View {
             }
             // この模様がどのデータを元に、どのスタイルで作られたかを見えるようにする
             // （ユーザーからの「元にしているデータを表示して」というフィードバック対応）。
-            if let kind = summary.dominantKindRaw.flatMap(ActivityKind.init(rawValue:)) {
-                let style = PatternStyle.style(for: kind)
-                Label("主な活動: \(kind.displayName) → \(style.displayName)の模様", systemImage: style.iconName)
-                    .font(.caption)
+            // さらに「なぜそのスタイルになったか」がもっと分かるよう、各スタイルのひと言説明も
+            // 添える（実機フィードバック対応）。手動でスタイルを選んでいる場合は
+            // 「主な活動→スタイル」の対応関係が実際とは異なるため、その旨がわかる文言にする。
+            if let style = PatternStyle(rawValue: summary.patternStyleRaw) {
+                if summary.isManualStyleOverride {
+                    Label("試しに選んだスタイル: \(style.displayName)", systemImage: style.iconName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let kind = summary.dominantKindRaw.flatMap(ActivityKind.init(rawValue:)) {
+                    Label("主な活動: \(kind.displayName) → \(style.displayName)の模様", systemImage: style.iconName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Text(style.rationale)
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
         }
         .padding(.horizontal, 16)
+    }
+
+    /// 「今日の模様」でも試しに他のスタイルへ変えられるスタイル選択行（ManualModeViewの
+    /// styleSwatchと同じ「アイコン+短いラベルの丸ボタン、選択中はハイライト」という見た目）。
+    /// 自動選択に戻すための選択肢も先頭に用意する。
+    private func styleSelectionRow(_ summary: TodaySummary) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("スタイルを試しに変える")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                styleOptionSwatch(
+                    label: "自動",
+                    iconName: "wand.and.stars",
+                    isSelected: !summary.isManualStyleOverride
+                ) {
+                    Task { await store.forceRefresh(styleOverride: nil) }
+                }
+                ForEach(PatternStyle.allCases) { style in
+                    styleOptionSwatch(
+                        label: style.shortLabel,
+                        iconName: style.iconName,
+                        isSelected: summary.isManualStyleOverride && summary.patternStyleRaw == style.rawValue
+                    ) {
+                        Task { await store.forceRefresh(styleOverride: style) }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+    }
+
+    private func styleOptionSwatch(label: String, iconName: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                ZStack {
+                    Circle()
+                        .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.1))
+                        .frame(width: 34, height: 34)
+                        .overlay(
+                            Circle().stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isSelected ? 2 : 1)
+                        )
+                    Image(systemName: iconName)
+                        .font(.caption)
+                        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                }
+                Text(label)
+                    .font(.system(size: 10))
+                    .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+            }
+        }
+        .disabled(store.isGenerating)
     }
 
     private func statItem(value: String, label: String) -> some View {

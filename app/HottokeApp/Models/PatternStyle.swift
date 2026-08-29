@@ -43,6 +43,18 @@ enum PatternStyle: String, CaseIterable, Equatable, Codable, Identifiable {
         case .fractal: return "tree.fill"
         }
     }
+
+    /// 「今日の模様」で、このスタイルがなぜ選ばれたのかをひと目で分かるように添えるひと言。
+    /// 「主な活動: ○○ → ××の模様」という1行だけでは対応関係が伝わりにくいという
+    /// 実機フィードバックを受けて追加した。
+    var rationale: String {
+        switch self {
+        case .tiling: return "規則正しく歩いた1日を、整然と並ぶ幾何学模様で表現"
+        case .spirograph: return "自転車で回転運動をした1日を、歯車のように巻く曲線で表現"
+        case .waves: return "静かに過ごした1日を、ゆったり重なる波の模様で表現"
+        case .fractal: return "よく走った1日を、勢いよく枝分かれする模様で表現"
+        }
+    }
 }
 
 /// 活動種別 → 数学模様スタイルのマッピング。オーナーとの相談で決めた対応（docs/02-spec.md参照）:
