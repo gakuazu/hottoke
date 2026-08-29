@@ -9,6 +9,7 @@ struct TodayView: View {
     @State private var looper: AVPlayerLooper?
     @State private var showSavedBanner = false
     @State private var saveErrorMessage: String?
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack {
@@ -64,8 +65,24 @@ struct TodayView: View {
                 .padding(.vertical, 16)
             }
             .navigationTitle("今日の模様")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        Task { await store.forceRefresh() }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .disabled(store.isGenerating)
+                }
+            }
             .task {
                 await store.loadOrGenerateTodayIfNeeded()
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                // アプリを再度前面に戻したタイミングで、日付が変わっていないかや
+                // 前回確定時から活動量が増えていないかを確認し、増えていれば模様を作り直す。
+                guard newPhase == .active else { return }
+                Task { await store.refreshIfStale() }
             }
             .onChange(of: store.videoURL) { _, newValue in
                 guard newValue != nil else { return }

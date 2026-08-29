@@ -1,7 +1,10 @@
 import Foundation
 
 /// 「今日の模様」の確定・永続化を管理する。
-/// docs/02-spec.md 7章の決定事項: 1日1回だけ生成・確定する（同日中の再訪では再生成しない）。
+/// 当初はdocs/02-spec.md 7章の決定通り「1日1回だけ生成・確定」だったが、
+/// 実際に使うと「時間が経って活動したのに更新されない」という不満につながったため、
+/// アプリを開き直した際に前回確定時から活動量（歩数など）が変化していれば
+/// 自動で作り直すよう変更した（refreshIfStale）。加えて手動での更新も可能にした（forceRefresh）。
 struct TodaySummary: Codable, Equatable {
     let dateKey: String
     let stepCount: Int
@@ -40,6 +43,7 @@ final class TodayPatternStore: ObservableObject {
 
     /// 今日すでに確定済みの模様があればそれを読み込み、なければ新しく生成する。
     func loadOrGenerateTodayIfNeeded() async {
+        guard !isGenerating else { return }
         let key = dateKey(for: Date())
 
         if let existing = loadPersistedSummary(), existing.dateKey == key {
@@ -54,15 +58,57 @@ final class TodayPatternStore: ObservableObject {
         await generateToday(dateKey: key)
     }
 
-    private func generateToday(dateKey key: String) async {
+    /// アプリを再度前面に戻したときなどに呼ぶ。日付が変わっていれば新しい日として生成し直し、
+    /// 同じ日でも前回確定時から歩数などの活動量が変化していれば最新のデータで模様を更新する。
+    /// 変化がなければ何もしない（動画の再書き出しは軽くない処理のため、無駄に毎回は行わない）。
+    func refreshIfStale() async {
+        guard !isGenerating else { return }
+        let key = dateKey(for: Date())
+
+        guard let existing = summary else {
+            await generateToday(dateKey: key)
+            return
+        }
+        if existing.dateKey != key {
+            await generateToday(dateKey: key)
+            return
+        }
+        let data = await activityService.fetchToday()
+        if hasMeaningfulChange(from: existing, to: data) {
+            await generateToday(dateKey: key, prefetchedData: data)
+        }
+    }
+
+    /// ユーザーが手動で更新ボタンを押したときに呼ぶ。変化の有無に関わらず必ず最新データで作り直す。
+    func forceRefresh() async {
+        guard !isGenerating else { return }
+        await generateToday(dateKey: dateKey(for: Date()))
+    }
+
+    private func hasMeaningfulChange(from existing: TodaySummary, to data: DailyActivityData) -> Bool {
+        existing.stepCount != data.stepCount
+            || existing.floorsAscended != data.floorsAscended
+            || Int(data.totalActiveSeconds / 60) != existing.activeMinutes
+    }
+
+    private func generateToday(dateKey key: String, prefetchedData: DailyActivityData? = nil) async {
         isGenerating = true
         errorMessage = nil
         defer { isGenerating = false }
 
-        let data = await activityService.fetchToday()
-        let fileName = "today-\(key).mp4"
+        let data: DailyActivityData
+        if let prefetchedData {
+            data = prefetchedData
+        } else {
+            data = await activityService.fetchToday()
+        }
+
+        // 同じ日のうちに更新で再生成する場合でもファイル名を毎回変える（末尾に生成時刻を付与）。
+        // ファイル名を固定すると再生成してもvideoURLが同じ値になり、TodayView側の
+        // onChange(of: store.videoURL)が変化を検知できず動画プレイヤーが更新されないため。
+        let previousFileName = summary?.dateKey == key ? summary?.videoFileName : nil
+        let fileName = "today-\(key)-\(Int(Date().timeIntervalSince1970)).mp4"
         let outputURL = documentsDirectory.appendingPathComponent(fileName)
-        try? FileManager.default.removeItem(at: outputURL)
 
         do {
             try await exporter.exportDailyPattern(data: data, to: outputURL)
@@ -78,6 +124,9 @@ final class TodayPatternStore: ObservableObject {
             persist(summary: newSummary)
             summary = newSummary
             videoURL = outputURL
+            if let previousFileName {
+                try? FileManager.default.removeItem(at: documentsDirectory.appendingPathComponent(previousFileName))
+            }
         } catch {
             errorMessage = "模様の生成に失敗しました: \(error.localizedDescription)"
         }
