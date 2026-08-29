@@ -41,6 +41,15 @@ struct TodayView: View {
                         .buttonStyle(.borderedProminent)
                         .disabled(store.videoURL == nil)
 
+                        Button {
+                            Task { await store.forceRefresh() }
+                        } label: {
+                            Label("最新のデータで作り直す", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(store.isGenerating)
+
                         NavigationLink {
                             ManualModeView()
                         } label: {
@@ -157,10 +166,20 @@ struct TodayView: View {
     }
 
     private func statsRow(_ summary: TodaySummary) -> some View {
-        HStack(spacing: 24) {
-            statItem(value: "\(summary.stepCount)", label: "歩数")
-            statItem(value: String(format: "%.1f km", summary.distanceMeters / 1000), label: "距離")
-            statItem(value: "\(summary.activeMinutes)分", label: "アクティブ時間")
+        VStack(spacing: 10) {
+            HStack(spacing: 24) {
+                statItem(value: "\(summary.stepCount)", label: "歩数")
+                statItem(value: String(format: "%.1f km", summary.distanceMeters / 1000), label: "距離")
+                statItem(value: "\(summary.activeMinutes)分", label: "アクティブ時間")
+            }
+            // この模様がどのデータを元に、どのスタイルで作られたかを見えるようにする
+            // （ユーザーからの「元にしているデータを表示して」というフィードバック対応）。
+            if let kind = summary.dominantKindRaw.flatMap(ActivityKind.init(rawValue:)) {
+                let style = PatternStyle.style(for: kind)
+                Label("主な活動: \(kind.displayName) → \(style.displayName)の模様", systemImage: style.iconName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 16)
     }
