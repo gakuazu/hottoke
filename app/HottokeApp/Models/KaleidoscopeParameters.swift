@@ -16,8 +16,8 @@ struct KaleidoscopeParameters: Equatable {
     var radialBurst: Double = 0         // 0...1（階段を上った量に応じた放射状の演出）
     var time: Double = 0                // 経過秒数。模様の動的な揺らぎ（呼吸・きらめき等）すべての時間軸に使う
 
-    // MARK: - 数学模様4スタイル（docs/02-spec.md参照。ガラス片方式から置き換え）
+    // MARK: - 数学模様9スタイル（docs/02-spec.md参照。ガラス片方式から置き換え）
 
-    var patternStyle: PatternStyle = .waves // 幾何学タイル/スピログラフ/波の干渉/フラクタル分岐
+    var patternStyle: PatternStyle = .waves // PatternStyle.swift参照（既存4種+2026-08-30追加の5種）
     var detail: Double = 0.5                // 0...1（密度・複雑さの基準値。KaleidoscopeRenderer内でtimeを使い緩やかに揺らされた上で使われる）
 }
