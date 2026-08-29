@@ -103,9 +103,13 @@ struct ManualModeView: View {
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.85))
 
-                    HStack(spacing: 10) {
-                        ForEach(PatternStyle.allCases) { style in
-                            styleSwatch(style)
+                    // 9スタイル分は横一列に並べきれないため、横スクロールにする
+                    // （5スタイル追加時に見た目が崩れないよう対応。docs/04-build-log.md参照）。
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(PatternStyle.allCases) { style in
+                                styleSwatch(style)
+                            }
                         }
                     }
                     VStack(alignment: .leading, spacing: 4) {
@@ -165,6 +169,9 @@ struct ManualModeView: View {
 
     private func styleSwatch(_ style: PatternStyle) -> some View {
         Button {
+            // ロック済みスタイル（将来課金で解放予定）はタップしても選択できない。
+            // paletteSwatchの鍵アイコン表示と同じ考え方（今回は土台のみ、実際の解放ロジックは未実装）。
+            guard !style.isLocked else { return }
             patternStyle = style
         } label: {
             VStack(spacing: 5) {
@@ -175,9 +182,15 @@ struct ManualModeView: View {
                         .overlay(
                             Circle().stroke(Color.white.opacity(patternStyle == style ? 0.9 : 0.2), lineWidth: patternStyle == style ? 2 : 1)
                         )
-                    Image(systemName: style.iconName)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(patternStyle == style ? 1 : 0.6))
+                    if style.isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    } else {
+                        Image(systemName: style.iconName)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(patternStyle == style ? 1 : 0.6))
+                    }
                 }
                 Text(style.shortLabel)
                     .font(.system(size: 10))

@@ -198,6 +198,11 @@ private extension PatternStyle {
         case .spirograph: return .purple
         case .waves: return .blue
         case .fractal: return .green
+        case .voronoi: return .yellow
+        case .lissajous: return .pink
+        case .truchet: return .teal
+        case .moire: return .indigo
+        case .flower: return .mint
         }
     }
 }

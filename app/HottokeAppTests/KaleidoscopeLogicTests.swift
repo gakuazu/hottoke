@@ -171,11 +171,12 @@ final class KaleidoscopeLogicTests: XCTestCase {
     /// なら日をまたいでもピクセル単位でほぼ同じ模様になっていた。
     /// ここでは同一の(size, symmetryCount, palette, time, detail, patternStyle)のまま
     /// seedだけを変えて描画し、生成されるビットマップのピクセルデータが異なることを
-    /// 4スタイルすべてで確認する。
+    /// 全スタイルで確認する（2026-08-30: 5スタイル追加時にPatternStyle.allCasesへ変更。
+    /// 新しく追加したスタイルもテスト漏れなく自動的にカバーされる）。
     func testDifferentSeedProducesDifferentPatternForEachStyle() {
         let size = CGSize(width: 240, height: 240)
 
-        for style in [PatternStyle.tiling, .spirograph, .waves, .fractal] {
+        for style in PatternStyle.allCases {
             var parametersA = KaleidoscopeParameters()
             parametersA.symmetryCount = 8
             parametersA.patternStyle = style

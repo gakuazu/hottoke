@@ -14,10 +14,11 @@ import CoreGraphics
 ///     埋まらない不具合になる。
 ///
 /// 扇形1つ分の「中身」は、ガラス片を敷き詰める旧方式（GlassShard/KaleidoscopeShapeGenerator、
-/// 現在は未使用）から、「数学模様」4スタイル（幾何学タイル/スピログラフ/波の干渉/フラクタル分岐）
-/// に置き換えた。実装はブラウザ上のHTML/Canvasプロトタイプ（renderTiling/renderSpirograph/
-/// renderWaves/renderFractal）をCoreGraphics APIへそのまま移植したもの。移植にあたっての
-/// API対応（Canvas 2D → CoreGraphics）:
+/// 現在は未使用）から、「数学模様」9スタイル（幾何学タイル/スピログラフ/波の干渉/フラクタル分岐/
+/// ひび割れ/リサージュ/トゥルーシェ/モアレ格子/花模様）に置き換えた。実装はブラウザ上の
+/// HTML/Canvasプロトタイプ（renderTiling/renderSpirograph/renderWaves/renderFractal/
+/// renderVoronoi/renderLissajous/renderTruchet/renderMoire/renderFlower）をCoreGraphics APIへ
+/// そのまま移植したもの。移植にあたってのAPI対応（Canvas 2D → CoreGraphics）:
 ///   - g.globalAlpha        → ctx.setAlpha(_:)
 ///   - g.globalCompositeOperation = 'lighter' → ctx.setBlendMode(.plusLighter)
 ///   - g.globalCompositeOperation = 'source-over' → ctx.setBlendMode(.normal)
@@ -167,6 +168,16 @@ enum KaleidoscopeRenderer {
             renderWaves(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
         case .fractal:
             renderFractal(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
+        case .voronoi:
+            renderVoronoi(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, seed: seed)
+        case .lissajous:
+            renderLissajous(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, seed: seed)
+        case .truchet:
+            renderTruchet(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, seed: seed)
+        case .moire:
+            renderMoire(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, seed: seed)
+        case .flower:
+            renderFlower(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
         }
 
         ctx.restoreGState() // クリップを解除
@@ -606,6 +617,263 @@ enum KaleidoscopeRenderer {
             // 根元の幹を短く(中心からすぐ分岐させる)。これが中心付近の疎さの直接の原因だった。
             branch(x: 0, y: 0, angle: trunkAngle, len: R * (0.10 - Double(i) * 0.006), depth: 0, seed: Double(i) * 7.31 + 1 + daySeedOffset, alphaMul: alphaMul)
         }
+    }
+
+    // MARK: - ひび割れ・ボロノイ風（プロトタイプ renderVoronoi の移植）
+
+    /// 三角格子の各点をハッシュでジタリングし、隣接点同士をジグザグの「ひび」線で結ぶ。
+    /// 厳密なボロノイ分割ではないが、絶対座標(count非依存)で配置するため中心が空洞に
+    /// ならず、格子点は画面全体に自然に埋まる（プロトタイプのコメントをそのまま踏襲）。
+    private static func renderVoronoi(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, seed: UInt64) {
+        let cell = R / (2.2 + detail * 4.2)
+        let span = Int((R * 1.15 / cell).rounded(.up)) + 2
+        ctx.setLineCap(.round)
+
+        // 格子点のジッター(揺らぎ)に足し込むseed由来のオフセット。renderTilingと同じ考え方で、
+        // 格子の位置・対称性そのものは変えず、点の揺れ方・色・線の濃さだけが日によって変わる。
+        let seedOffsetA = seedComponent(seed, 61.3) * 1000
+        let seedOffsetB = seedComponent(seed, 84.9) * 1000
+
+        func jitteredPos(_ row: Int, _ col: Int) -> (x: Double, y: Double) {
+            let offsetX = (row % 2 == 0) ? 0.0 : cell / 2
+            let bx = Double(col) * cell + offsetX
+            let by = Double(row) * cell * 0.866
+            let jx = (hashRC(Double(row) + seedOffsetA, Double(col) + seedOffsetB) - 0.5) * cell * 0.55
+            let jy = (hashRC(Double(row + 71) + seedOffsetA, Double(col - 23) + seedOffsetB) - 0.5) * cell * 0.55
+            return (bx + jx, by + jy)
+        }
+
+        for row in -span...span {
+            for col in -span...span {
+                let c = jitteredPos(row, col)
+                if hypot(c.x, c.y) > R * 1.1 { continue }
+                let h = hashRC(Double(row * 3 + col) + seedOffsetA, Double(col * 5 - row) + seedOffsetB)
+                let color = palette[Int(h * Double(palette.count))]
+                ctx.setStrokeColor(color)
+                ctx.setLineWidth(1.1 + h * 0.9)
+                ctx.setAlpha(0.5 + 0.25 * sin(t * 0.7 + h * 6.28))
+                ctx.setBlendMode(.normal)
+
+                for (nr, nc) in [(row, col + 1), (row + 1, col), (row + 1, col - 1)] {
+                    let n = jitteredPos(nr, nc)
+                    let midx = (c.x + n.x) / 2 + (hashRC(c.x * 0.01, n.y * 0.01) - 0.5) * cell * 0.25
+                    let midy = (c.y + n.y) / 2 + (hashRC(n.x * 0.01, c.y * 0.01) - 0.5) * cell * 0.25
+                    let path = CGMutablePath()
+                    path.move(to: CGPoint(x: c.x, y: c.y))
+                    path.addLine(to: CGPoint(x: midx, y: midy))
+                    path.addLine(to: CGPoint(x: n.x, y: n.y))
+                    ctx.addPath(path)
+                    ctx.strokePath()
+                }
+
+                ctx.saveGState()
+                ctx.setBlendMode(.plusLighter)
+                ctx.setAlpha(0.5)
+                ctx.setFillColor(color)
+                let dotR = cell * 0.05
+                ctx.fillEllipse(in: CGRect(x: c.x - dotR, y: c.y - dotR, width: dotR * 2, height: dotR * 2))
+                ctx.restoreGState()
+            }
+        }
+    }
+
+    // MARK: - リサージュ曲線（プロトタイプ renderLissajous の移植）
+
+    private static func renderLissajous(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, seed: UInt64) {
+        let layers = 3 + Int((detail * 3).rounded())
+        for layerIndex in 0..<layers {
+            let a = Double(3 + (layerIndex % 4))
+            let b = a + 1 + Double(layerIndex % 3)
+            // 層ごとの位相オフセットにseed由来の値を足し込み、曲線の交差の仕方が日によって変わるようにする。
+            let seedPhase = seedComponent(seed, Double(layerIndex) * 4.4 + 1) * 2 * Double.pi
+            let delta = Double.pi / Double(2 + layerIndex) + t * 0.06 + seedPhase
+            let scaleX = R * (0.55 + 0.35 * (Double(layerIndex) / Double(layers)))
+            let scaleY = R * (0.55 + 0.35 * (Double(layerIndex) / Double(layers))) * 0.9
+            let color = palette[layerIndex % palette.count]
+            let steps = 720
+
+            let path = CGMutablePath()
+            for i in 0...steps {
+                let tt = (Double(i) / Double(steps)) * 2 * Double.pi
+                let x = scaleX * sin(a * tt + delta)
+                let y = scaleY * sin(b * tt)
+                let point = CGPoint(x: CGFloat(x), y: CGFloat(y))
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(1.4)
+            ctx.setAlpha(0.8)
+            ctx.setBlendMode(.normal)
+            ctx.addPath(path)
+            ctx.strokePath()
+
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+            ctx.setAlpha(0.28)
+            ctx.setLineWidth(4.5)
+            ctx.setStrokeColor(color)
+            ctx.addPath(path)
+            ctx.strokePath()
+            ctx.restoreGState()
+        }
+
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        let coreColor = palette[0]
+        let clearCoreColor = coreColor.copy(alpha: 0) ?? coreColor
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [coreColor, clearCoreColor] as CFArray, locations: [0, 1]) {
+            ctx.setAlpha(0.5)
+            ctx.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: CGFloat(R * 0.1), options: [])
+        }
+        ctx.restoreGState()
+    }
+
+    // MARK: - トゥルーシェ・タイル（プロトタイプ renderTruchet の移植）
+
+    /// 正方格子の各マスに、2種類の四分円ペア（左上⇄右下 / 右上⇄左下）のどちらかを
+    /// ハッシュで振り分けて敷き詰める古典的なTruchetタイルの実装。
+    private static func renderTruchet(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, seed: UInt64) {
+        let cell = R / (3 + detail * 5)
+        let span = Int((R * 1.1 / cell).rounded(.up)) + 2
+        ctx.setLineCap(.round)
+        let r = CGFloat(cell / 2)
+
+        let seedOffsetA = seedComponent(seed, 17.2) * 1000
+        let seedOffsetB = seedComponent(seed, 29.6) * 1000
+
+        for row in -span...span {
+            for col in -span...span {
+                let cx = Double(col) * cell
+                let cy = Double(row) * cell
+                if hypot(cx, cy) > R * 1.08 { continue }
+                let h = hashRC(Double(row) + seedOffsetA, Double(col) + seedOffsetB)
+                let flip = h > 0.5
+                let color = palette[Int(hashRC(Double(row + 40) + seedOffsetA, Double(col - 40) + seedOffsetB) * Double(palette.count))]
+                ctx.setStrokeColor(color)
+                ctx.setLineWidth(max(1, cell * 0.06))
+                ctx.setAlpha(0.75)
+                ctx.setBlendMode(.normal)
+
+                ctx.saveGState()
+                ctx.translateBy(x: CGFloat(cx), y: CGFloat(cy))
+                let pathA = CGMutablePath()
+                let pathB = CGMutablePath()
+                if !flip {
+                    pathA.addArc(center: CGPoint(x: -r, y: -r), radius: r, startAngle: 0, endAngle: .pi / 2, clockwise: false)
+                    pathB.addArc(center: CGPoint(x: r, y: r), radius: r, startAngle: .pi, endAngle: .pi * 1.5, clockwise: false)
+                } else {
+                    pathA.addArc(center: CGPoint(x: r, y: -r), radius: r, startAngle: .pi / 2, endAngle: .pi, clockwise: false)
+                    pathB.addArc(center: CGPoint(x: -r, y: r), radius: r, startAngle: .pi * 1.5, endAngle: .pi * 2, clockwise: false)
+                }
+                ctx.addPath(pathA); ctx.strokePath()
+                ctx.addPath(pathB); ctx.strokePath()
+                ctx.restoreGState()
+            }
+        }
+    }
+
+    // MARK: - モアレ格子（プロトタイプ renderMoire の移植）
+
+    /// 細かい平行線の束を、角度をずらして3セット重ねる。線同士の干渉でモアレ模様が生まれる。
+    private static func renderMoire(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, seed: UInt64) {
+        let setCount = 3
+        // モアレはハッシュ格子を使わないスタイルのため、seedはここで(1)全体の回転オフセットと
+        // (2)線の間隔そのものに足し込み、日によって縞の重なり方・粗さが変わるようにする。
+        let seedAngleOffset = seedComponent(seed, 6.6) * 2 * Double.pi
+        let seedSpacingFactor = 1.0 + 0.18 * (seedComponent(seed, 12.2) - 0.5)
+        let baseSpacing = R * (0.05 - detail * 0.028) * seedSpacingFactor
+
+        for s in 0..<setCount {
+            let angle = (Double(s) * Double.pi / Double(setCount)) + t * 0.04 * Double(s + 1) + seedAngleOffset
+            let color = palette[s % palette.count]
+            ctx.saveGState()
+            ctx.rotate(by: angle)
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(0.6)
+            ctx.setAlpha(0.35)
+            ctx.setBlendMode(.normal)
+            let lineCount = Int((R * 2.2 / baseSpacing).rounded(.up))
+            for i in -lineCount...lineCount {
+                let x = Double(i) * baseSpacing
+                if abs(x) > R * 1.15 { continue }
+                let path = CGMutablePath()
+                path.move(to: CGPoint(x: CGFloat(x), y: CGFloat(-R * 1.15)))
+                path.addLine(to: CGPoint(x: CGFloat(x), y: CGFloat(R * 1.15)))
+                ctx.addPath(path)
+                ctx.strokePath()
+            }
+            ctx.restoreGState()
+        }
+
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        let coreColor = palette[0]
+        let clearCoreColor = coreColor.copy(alpha: 0) ?? coreColor
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [coreColor, clearCoreColor] as CFArray, locations: [0, 1]) {
+            ctx.setAlpha(0.35)
+            ctx.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: CGFloat(R * 0.16), options: [])
+        }
+        ctx.restoreGState()
+    }
+
+    // MARK: - 花模様（プロトタイプ renderFlower / superformulaR の移植）
+
+    private static func superformulaR(theta: Double, m: Double, n1: Double, n2: Double, n3: Double) -> Double {
+        let t1 = abs(cos(m * theta / 4))
+        let t2 = abs(sin(m * theta / 4))
+        return pow(pow(t1, n2) + pow(t2, n3), -1 / n1)
+    }
+
+    private static func renderFlower(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int, seed: UInt64) {
+        let layers = 2 + Int((detail * 2).rounded())
+        for layerIndex in 0..<layers {
+            let m = Double(n) + (layerIndex % 2 == 0 ? 0 : 1) // 対称数に近い花びら数にして万華鏡と調和させる
+            let n1 = 0.3 + 0.5 * (Double(layerIndex + 1) / Double(layers))
+            let n2 = 1.7, n3 = 1.7
+            let scale = R * (0.35 + 0.55 * Double(layerIndex + 1) / Double(layers))
+            let color = palette[layerIndex % palette.count]
+            let steps = 480
+            // 層ごとの位相にseed由来の値を足し込み、花びらの向き・重なり方が日によって変わるようにする。
+            let seedPhase = seedComponent(seed, Double(layerIndex) * 5.5 + 2) * 2 * Double.pi
+
+            let path = CGMutablePath()
+            for i in 0...steps {
+                let theta = (Double(i) / Double(steps)) * 2 * Double.pi + t * (0.05 + Double(layerIndex) * 0.01) + seedPhase
+                let rr = superformulaR(theta: theta, m: m, n1: n1, n2: n2, n3: n3) * scale
+                let point = CGPoint(x: CGFloat(rr * cos(theta)), y: CGFloat(rr * sin(theta)))
+                if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            }
+            path.closeSubpath()
+
+            // 塗りつぶすと対称数ぶん重なった時にただの塊に見えてしまうため、線とグローだけで
+            // 花びらの輪郭を表現する（他のスタイルと同じ「線+発光の二度描き」方式）。
+            ctx.setStrokeColor(color)
+            ctx.setLineWidth(1.5)
+            ctx.setAlpha(0.85)
+            ctx.setBlendMode(.normal)
+            ctx.addPath(path)
+            ctx.strokePath()
+
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+            ctx.setAlpha(0.25)
+            ctx.setLineWidth(4.5)
+            ctx.setStrokeColor(color)
+            ctx.addPath(path)
+            ctx.strokePath()
+            ctx.restoreGState()
+        }
+
+        ctx.saveGState()
+        ctx.setBlendMode(.plusLighter)
+        let white = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
+        let clearWhite = CGColor(red: 1, green: 1, blue: 1, alpha: 0)
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [white, clearWhite] as CFArray, locations: [0, 1]) {
+            ctx.setAlpha(0.6)
+            ctx.drawRadialGradient(gradient, startCenter: .zero, startRadius: 0, endCenter: .zero, endRadius: CGFloat(R * 0.09), options: [])
+        }
+        ctx.restoreGState()
     }
 
     // MARK: - 装飾オーバーレイ

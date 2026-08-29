@@ -248,21 +248,27 @@ struct TodayView: View {
             Text("スタイルを試しに変える")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            HStack(spacing: 10) {
-                styleOptionSwatch(
-                    label: "自動",
-                    iconName: "wand.and.stars",
-                    isSelected: !summary.isManualStyleOverride
-                ) {
-                    Task { await store.forceRefresh(styleOverride: nil) }
-                }
-                ForEach(PatternStyle.allCases) { style in
+            // 9スタイル分は横一列に並べきれないため、横スクロールにする
+            // （5スタイル追加時に見た目が崩れないよう対応。docs/04-build-log.md参照）。
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
                     styleOptionSwatch(
-                        label: style.shortLabel,
-                        iconName: style.iconName,
-                        isSelected: summary.isManualStyleOverride && summary.patternStyleRaw == style.rawValue
+                        label: "自動",
+                        iconName: "wand.and.stars",
+                        isLocked: false,
+                        isSelected: !summary.isManualStyleOverride
                     ) {
-                        Task { await store.forceRefresh(styleOverride: style) }
+                        Task { await store.forceRefresh(styleOverride: nil) }
+                    }
+                    ForEach(PatternStyle.allCases) { style in
+                        styleOptionSwatch(
+                            label: style.shortLabel,
+                            iconName: style.iconName,
+                            isLocked: style.isLocked,
+                            isSelected: summary.isManualStyleOverride && summary.patternStyleRaw == style.rawValue
+                        ) {
+                            Task { await store.forceRefresh(styleOverride: style) }
+                        }
                     }
                 }
             }
@@ -270,8 +276,13 @@ struct TodayView: View {
         .padding(.horizontal, 16)
     }
 
-    private func styleOptionSwatch(label: String, iconName: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func styleOptionSwatch(label: String, iconName: String, isLocked: Bool, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            // ロック済みスタイル（将来課金で解放予定）はタップしても選択できない
+            // （ManualModeViewのstyleSwatchと同じ考え方。今回は土台のみ）。
+            guard !isLocked else { return }
+            action()
+        } label: {
             VStack(spacing: 5) {
                 ZStack {
                     Circle()
@@ -280,9 +291,15 @@ struct TodayView: View {
                         .overlay(
                             Circle().stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.3), lineWidth: isSelected ? 2 : 1)
                         )
-                    Image(systemName: iconName)
-                        .font(.caption)
-                        .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    if isLocked {
+                        Image(systemName: "lock.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: iconName)
+                            .font(.caption)
+                            .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+                    }
                 }
                 Text(label)
                     .font(.system(size: 10))
