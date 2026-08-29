@@ -11,6 +11,7 @@ struct ArchiveDayDetailView: View {
 
     @State private var queuePlayer: AVQueuePlayer?
     @State private var looper: AVPlayerLooper?
+    @State private var playerFileName: String?
     @State private var showSavedBanner = false
     @State private var saveErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
@@ -47,6 +48,22 @@ struct ArchiveDayDetailView: View {
                     .disabled(entry == nil)
                     .padding(.horizontal, 16)
 
+                    // すでに生成済みの過去日も、最新のデータで作り直せるようにする。
+                    // ただしOSの活動履歴の保持期間を過ぎている日で作り直すと、データが
+                    // 取得できず「静けさの模様」に劣化して上書きしてしまうため、
+                    // 生成可能な範囲の日にだけボタンを出す。
+                    if entry != nil && store.isGeneratable(date: date) {
+                        Button {
+                            Task { try? await store.generate(for: date) }
+                        } label: {
+                            Label("最新のデータで作り直す", systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(store.isGenerating)
+                        .padding(.horizontal, 16)
+                    }
+
                     if showSavedBanner {
                         Text("カメラロールに保存しました")
                             .font(.footnote)
@@ -77,6 +94,9 @@ struct ArchiveDayDetailView: View {
                 guard !isGenerating else { return }
                 setUpPlayerIfNeeded()
             }
+            .onChange(of: entry?.videoFileName) { _, _ in
+                setUpPlayerIfNeeded()
+            }
         }
     }
 
@@ -87,7 +107,20 @@ struct ArchiveDayDetailView: View {
             if let queuePlayer {
                 VideoPlayer(player: queuePlayer)
                     .disabled(true)
-            } else if store.isGenerating {
+            } else if !store.isGenerating {
+                if entry == nil {
+                    Text("この日の模様はまだありません")
+                        .foregroundStyle(.white.opacity(0.6))
+                } else {
+                    Text("模様を準備中です")
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+            }
+
+            // 「作り直す」で既存の動画が表示されたまま生成中の場合も、進行中だと
+            // わかるように上から覆う（TodayViewで直したのと同じ考え方）。
+            if store.isGenerating {
+                Color.black.opacity(queuePlayer == nil ? 1 : 0.55)
                 VStack(spacing: 8) {
                     ProgressView()
                         .tint(.white)
@@ -95,18 +128,15 @@ struct ArchiveDayDetailView: View {
                         .font(.footnote)
                         .foregroundStyle(.white.opacity(0.9))
                 }
-            } else if entry == nil {
-                Text("この日の模様はまだありません")
-                    .foregroundStyle(.white.opacity(0.6))
-            } else {
-                Text("模様を準備中です")
-                    .foregroundStyle(.white.opacity(0.6))
             }
         }
     }
 
+    /// 「作り直す」で動画ファイルが差し替わった場合も検知して再生し直せるよう、
+    /// queuePlayerの有無ではなく「今表示しているファイル名と違うか」で判定する
+    /// （TodayViewで一度直したのと同じ考え方）。
     private func setUpPlayerIfNeeded() {
-        guard queuePlayer == nil, let entry else { return }
+        guard let entry, entry.videoFileName != playerFileName else { return }
         let url = store.videoURL(for: entry)
         guard FileManager.default.fileExists(atPath: url.path) else { return }
         let item = AVPlayerItem(url: url)
@@ -114,6 +144,7 @@ struct ArchiveDayDetailView: View {
         looper = AVPlayerLooper(player: player, templateItem: item)
         player.play()
         queuePlayer = player
+        playerFileName = entry.videoFileName
     }
 
     private func statsRow(_ entry: ArchiveEntry) -> some View {

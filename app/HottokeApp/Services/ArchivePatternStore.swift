@@ -99,8 +99,10 @@ final class ArchivePatternStore: ObservableObject {
     }
 
     /// 指定した日のデータを取得して動画を生成し、アーカイブに保存する。
-    /// 「今日」を指定した場合でも、TodayPatternStoreとは別にアーカイブ専用の動画ファイルを
-    /// 新しく作る（TodayPatternStoreが管理するファイルには一切手を触れない）。
+    /// すでにその日の模様が生成済みでも、呼べば必ず最新データで作り直す（過去日の
+    /// 「作り直す」に対応するため）。「今日」を指定した場合でも、TodayPatternStoreとは
+    /// 別にアーカイブ専用の動画ファイルを新しく作る（TodayPatternStoreが管理する
+    /// ファイルには一切手を触れない）。
     func generate(for date: Date) async throws {
         guard !isGenerating else { return }
         isGenerating = true
@@ -110,7 +112,11 @@ final class ArchivePatternStore: ObservableObject {
         let key = Self.dateKey(for: date)
         let data = await activityService.fetch(for: date)
         let style = data.dominantMovingKind.map(PatternStyle.style(for:)) ?? .waves
-        let fileName = "archive-\(key)-\(style.rawValue).mp4"
+        // ファイル名に生成時刻も含める。日付+スタイル名だけだと、同じスタイルへ
+        // 作り直したときにファイル名が変わらず、動画プレイヤー側が更新を検知できない
+        // （TodayPatternStoreで一度直したのと同じ問題）。
+        let previousFileName = entriesByDateKey[key]?.videoFileName
+        let fileName = "archive-\(key)-\(style.rawValue)-\(Int(Date().timeIntervalSince1970)).mp4"
         let outputURL = documentsDirectory.appendingPathComponent(fileName)
 
         do {
@@ -132,6 +138,10 @@ final class ArchivePatternStore: ObservableObject {
         )
         entriesByDateKey[key] = entry
         persistIndex()
+
+        if let previousFileName {
+            try? FileManager.default.removeItem(at: documentsDirectory.appendingPathComponent(previousFileName))
+        }
     }
 
     private func loadTodaySummary() -> TodaySummary? {
