@@ -399,4 +399,12 @@ Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで�
 
 ### ビルド確認について
 
-コミット・push後にGitHub Actionsで確認する。結果はこの後追記する。
+コミット・pushし、GitHub Actionsで確認したところ**成功**した（今回追加した「seedを変えると模様が変わることを確認するテスト」も含めて、ユニットテストは通っている）。
+
+- シミュレータ向けビルド（コンパイルが通るかの確認）: 成功
+- ユニットテスト: 成功
+- 実機向けの署名なしビルド・IPA化: 成功
+
+実行結果: https://github.com/gakuazu/hottoke/actions/runs/33254513489
+
+これまでどおり、Artifactから`HottokeApp-unsigned.ipa`をダウンロードしてSideloadlyで実機にインストールし直せば、今回の修正が反映される（同じスタイルでも日によって模様の形がちゃんと変わるようになっているはず）。
