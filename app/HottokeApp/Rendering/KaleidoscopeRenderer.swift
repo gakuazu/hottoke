@@ -30,28 +30,53 @@ enum KaleidoscopeRenderer {
     static func render(into context: CGContext, size: CGSize, parameters: KaleidoscopeParameters) {
         guard size.width > 0, size.height > 0 else { return }
 
-        let n = max(3, parameters.symmetryCount)
-        let wedgeAngle = CGFloat(2 * Double.pi / Double(n))
-        let center = CGPoint(x: size.width / 2, y: size.height / 2)
-        let radius = min(size.width, size.height) / 2
-
         // 背景: ベタ塗りグラデーションではなく暗い下地のみ（動画書き出しに透過チャンネルの
-        // ないmp4を使うため塗りつぶし自体は必要）。
+        // ないmp4を使うため塗りつぶし自体は必要）。扇形が生成できなかった場合に備えて
+        // ここでも塗っておく（stampWedge側でも同じ塗りつぶしを行う）。
         context.setFillColor(CGColor(red: 0.02, green: 0.02, blue: 0.04, alpha: 1))
         context.fill(CGRect(origin: .zero, size: size))
 
         // ルール1: 扇形は1回だけオフスクリーンに描画する。
-        guard let wedgeImage = renderWedgeBitmap(
+        guard let wedgeImage = renderWedgeImage(size: size, parameters: parameters) else {
+            // 何らかの理由で描画できなくても、描画ループ自体は止めない（docs/03b 安全設計）。
+            return
+        }
+
+        stampWedge(wedgeImage, into: context, size: size, parameters: parameters)
+    }
+
+    /// 扇形1つ分の中身だけをオフスクリーンビットマップとして生成する（重い処理）。
+    ///
+    /// 動画書き出し（KaleidoscopeVideoExporter）は`render(into:size:parameters:)`を毎フレーム
+    /// そのまま呼べばよいが、ライブプレビュー側（KaleidoscopeUIView）はこの関数の結果を
+    /// 自前でキャッシュし、約55msに1回だけ呼び直す（プロトタイプのWEDGE_INTERVALと同じ考え方。
+    /// 詳細はKaleidoscopeUIView参照）。
+    static func renderWedgeImage(size: CGSize, parameters: KaleidoscopeParameters) -> CGImage? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let n = max(3, parameters.symmetryCount)
+        let radius = min(size.width, size.height) / 2
+        return renderWedgeBitmap(
             style: parameters.patternStyle,
             symmetryCount: n,
             radius: radius,
             palette: parameters.palette,
             time: parameters.time,
             detail: parameters.detail
-        ) else {
-            // 何らかの理由で描画できなくても、描画ループ自体は止めない（docs/03b 安全設計）。
-            return
-        }
+        )
+    }
+
+    /// 生成済みの扇形ビットマップを回転・鏡映・スタンプして最終画像に仕上げる（軽い処理）。
+    /// 背景の塗りつぶし・全体の変位/脈動・オーバーレイもここで行う。
+    static func stampWedge(_ wedgeImage: CGImage, into context: CGContext, size: CGSize, parameters: KaleidoscopeParameters) {
+        guard size.width > 0, size.height > 0 else { return }
+
+        let n = max(3, parameters.symmetryCount)
+        let wedgeAngle = CGFloat(2 * Double.pi / Double(n))
+        let center = CGPoint(x: size.width / 2, y: size.height / 2)
+        let radius = min(size.width, size.height) / 2
+
+        context.setFillColor(CGColor(red: 0.02, green: 0.02, blue: 0.04, alpha: 1))
+        context.fill(CGRect(origin: .zero, size: size))
 
         // 「振る」操作の変位は模様全体をまとめて動かす（個々の扇形ごとに別方向へずらさない）。
         let shiftedCenter = CGPoint(x: center.x + parameters.flowOffset.dx, y: center.y + parameters.flowOffset.dy)

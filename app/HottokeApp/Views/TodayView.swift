@@ -9,6 +9,12 @@ struct TodayView: View {
     @State private var looper: AVPlayerLooper?
     @State private var showSavedBanner = false
     @State private var saveErrorMessage: String?
+    @State private var showUpdatedBanner = false
+    // 「作り直し中」に既存の動画が表示されたままだと更新中であることが分からないため、
+    // 生成開始時点で既存の模様（summary）があったかどうかを覚えておく。これがtrueのまま
+    // isGeneratingがfalseに戻ったときだけ「更新しました」バナーを出す
+    // （アプリ起動直後の初回生成では紛らわしいので出さない）。
+    @State private var isRefreshingExistingPattern = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -65,6 +71,11 @@ struct TodayView: View {
                             .font(.footnote)
                             .foregroundStyle(.green)
                     }
+                    if showUpdatedBanner {
+                        Text("模様を更新しました")
+                            .font(.footnote)
+                            .foregroundStyle(.green)
+                    }
                     if let saveErrorMessage {
                         Text(saveErrorMessage)
                             .font(.footnote)
@@ -97,6 +108,21 @@ struct TodayView: View {
                 guard newValue != nil else { return }
                 setUpPlayer()
             }
+            .onChange(of: store.isGenerating) { oldValue, newValue in
+                if newValue {
+                    // 生成が始まった瞬間。すでに確定済みの模様がある状態からの「作り直し」なのか、
+                    // アプリ起動直後などの「初回生成」なのかをここで覚えておく
+                    // （この時点ではstore.summaryはまだ更新前の値のまま）。
+                    isRefreshingExistingPattern = store.summary != nil
+                } else if oldValue, isRefreshingExistingPattern {
+                    // 既存の模様がある状態からの作り直しが完了した。初回生成のときは出さない。
+                    isRefreshingExistingPattern = false
+                    showUpdatedBanner = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                        showUpdatedBanner = false
+                    }
+                }
+            }
         }
     }
 
@@ -113,7 +139,24 @@ struct TodayView: View {
                 Text("模様を準備中です")
                     .foregroundStyle(.white.opacity(0.6))
             }
+
+            // 既存の動画が表示されている状態で「作り直す」を押しても進行中であることが
+            // 分かるよう、生成中は元の動画の上に薄い暗幕とインジケーターを重ねる。
+            if store.isGenerating, queuePlayer != nil {
+                ZStack {
+                    Color.black.opacity(0.55)
+                    VStack(spacing: 8) {
+                        ProgressView()
+                            .tint(.white)
+                        Text("最新のデータで作り直しています…")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.9))
+                    }
+                }
+                .transition(.opacity)
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: store.isGenerating)
     }
 
     /// 生成中の待ち時間を「静止したスピナー」ではなく、実際にできあがる模様と同じ
