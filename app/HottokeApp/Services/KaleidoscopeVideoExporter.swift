@@ -178,13 +178,19 @@ final class KaleidoscopeVideoExporter {
         // 正確な発生タイミングまでは扱わず、その日の合計階数を一定の強さのオーバーレイとして重ねる。
         let radialBurst = min(1.0, Double(data.floorsAscended) / 20.0) * 0.5
 
+        // 対称数(symmetryCount)も以前は8固定だったため、模様の根本的な構造が日によって
+        // 一切変わらなかった（実機フィードバック対応）。その日の歩数とseedを組み合わせて
+        // 6〜12の範囲で決め、動画を通して1つに固定する（対称数が動画の途中で変わると
+        // 継ぎ目が目立つため）。
+        let symmetryCount = 6 + Int((seed &+ UInt64(max(0, data.stepCount))) % 7)
+
         return (0..<frameCount).map { index in
             let keyframe = keyframes[index]
             let elapsed = elapsedTimes[index]
             let pulsePhase = (sin(elapsed * 2.0) + 1) / 2
 
             return KaleidoscopeParameters(
-                symmetryCount: 8,
+                symmetryCount: symmetryCount,
                 seed: seed &+ keyframe.timeOfDay.stableIndex,
                 palette: KaleidoscopePalette.forTimeOfDay(keyframe.timeOfDay),
                 rotation: rotations[index],

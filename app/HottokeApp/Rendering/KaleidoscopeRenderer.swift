@@ -61,7 +61,8 @@ enum KaleidoscopeRenderer {
             radius: radius,
             palette: parameters.palette,
             time: parameters.time,
-            detail: parameters.detail
+            detail: parameters.detail,
+            seed: parameters.seed
         )
     }
 
@@ -118,7 +119,7 @@ enum KaleidoscopeRenderer {
 
     // MARK: - 扇形1つ分をオフスクリーンビットマップに描画
 
-    private static func renderWedgeBitmap(style: PatternStyle, symmetryCount: Int, radius: CGFloat, palette: KaleidoscopePalette, time: Double, detail: Double) -> CGImage? {
+    private static func renderWedgeBitmap(style: PatternStyle, symmetryCount: Int, radius: CGFloat, palette: KaleidoscopePalette, time: Double, detail: Double, seed: UInt64) -> CGImage? {
         let dimension = max(2, Int(radius.rounded(.up)) * 2)
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         guard let ctx = CGContext(
@@ -159,13 +160,13 @@ enum KaleidoscopeRenderer {
 
         switch style {
         case .tiling:
-            renderTiling(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail)
+            renderTiling(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, seed: seed)
         case .spirograph:
-            renderSpirograph(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount)
+            renderSpirograph(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
         case .waves:
-            renderWaves(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount)
+            renderWaves(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
         case .fractal:
-            renderFractal(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount)
+            renderFractal(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
         }
 
         ctx.restoreGState() // クリップを解除
@@ -180,6 +181,19 @@ enum KaleidoscopeRenderer {
     private static func hashRC(_ a: Double, _ b: Double) -> Double {
         let x = sin(a * 127.1 + b * 311.7) * 43758.5453
         return x - floor(x)
+    }
+
+    /// `seed`から0〜1の疑似乱数値を1つ取り出す。`salt`を変えることで同じseedから
+    /// 複数の独立した値（オフセットA用・オフセットB用…）を作れる。
+    ///
+    /// これが今回のバグ修正の核: `KaleidoscopeParameters.seed`は以前はどの描画関数にも
+    /// 渡されておらず、模様の「形」は`(R, t, detail, n)`だけで決まっていた。そのため同じ
+    /// スタイル・似た活動量・同じ時間帯なら日をまたいでもほぼ同じ絵になっていた。
+    /// この関数で作った値を、各スタイルの「形そのもの」を決めている計算（格子ハッシュの
+    /// オフセット・曲線の位相・分岐の揺れ方の種）に足し込むことで、日ごとにseedが変われば
+    /// 幾何学的な形自体が変わるようにする。
+    private static func seedComponent(_ seed: UInt64, _ salt: Double) -> Double {
+        hashRC(Double(seed % 1_000_000), salt)
     }
 
     private static func tileLatticePos(row: Int, col: Int, cell: Double) -> (x: Double, y: Double) {
@@ -237,10 +251,16 @@ enum KaleidoscopeRenderer {
         ctx.setBlendMode(.normal)
     }
 
-    private static func renderTiling(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double) {
+    private static func renderTiling(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, seed: UInt64) {
         let cell = R / (3 + detail * 5.5)
         let span = Int((R * 1.1 / cell).rounded(.up)) + 2
         ctx.setLineCap(.round)
+
+        // 格子点のハッシュに足し込むseed由来のオフセット。row/colそのものではなく
+        // 「row/colに一様に足すオフセット」なので、格子の位置・扇形の対称性には一切
+        // 影響しない（ズレるのはハッシュの結果＝モチーフの種類・色・回転だけ）。
+        let seedOffsetA = seedComponent(seed, 11.7) * 1000
+        let seedOffsetB = seedComponent(seed, 53.3) * 1000
 
         // モチーフ同士を編み込むような細い地紋線（三角格子の辺の一部）。
         // これがないと「同じシールが並んでいるだけ」に見えやすいため。
@@ -274,9 +294,9 @@ enum KaleidoscopeRenderer {
                 let dist = hypot(c.x, c.y)
                 if dist > R * 1.08 { continue }
 
-                let h1 = hashRC(Double(row), Double(col))
-                let h2 = hashRC(Double(row + 91), Double(col - 17))
-                let h3 = hashRC(Double(row - 33), Double(col + 58))
+                let h1 = hashRC(Double(row) + seedOffsetA, Double(col) + seedOffsetB)
+                let h2 = hashRC(Double(row + 91) + seedOffsetA, Double(col - 17) + seedOffsetB)
+                let h3 = hashRC(Double(row - 33) + seedOffsetA, Double(col + 58) + seedOffsetB)
                 let motif = Int(h1 * 5)
                 let color = palette[Int(h2 * Double(palette.count))]
                 let sizeScale = 0.30 + h3 * 0.22 // 0.30〜0.52でばらつかせ、粒の大小もつける。
@@ -293,7 +313,7 @@ enum KaleidoscopeRenderer {
 
     // MARK: - スピログラフ（プロトタイプ renderSpirograph の移植）
 
-    private static func renderSpirograph(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
+    private static func renderSpirograph(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int, seed: UInt64) {
         // 層のRbを中心寄り〜外周まで広く分散させ、さらに中心にコアの発光を足して空洞を埋める
         // （層のRbが外周寄りの狭い帯に集まると中心付近ががら空きになっていた反省）。
         //
@@ -314,15 +334,20 @@ enum KaleidoscopeRenderer {
             let spanT = Double(layerIndex) / Double(maxLayers - 1)
             let Rb = R * (0.15 + 0.79 * spanT) // 中心近くから外周まで層を配置
             let rb = R / Double(n + 1 + layerIndex)
-            let d = rb * (0.55 + 0.3 * detail)
+            // ペンの位置dにseed由来の揺らぎを足す。曲線の「巻き方」自体が日によって変わる
+            // （時間tによる位相ずれとは別の、日単位で固定の差）。
+            let dSeedFactor = 1.0 + 0.35 * (seedComponent(seed, Double(layerIndex) * 5.1 + 2.3) - 0.5)
+            let d = rb * (0.55 + 0.3 * detail) * dSeedFactor
             let color = palette[layerIndex % palette.count]
             let k = (Rb - rb) / rb
             let revolutions = n + 1 + layerIndex
             let steps = 360 * min(revolutions, 10)
+            // 層ごとに一様な位相オフセット（曲線全体を回すだけなので対称性には影響しない）。
+            let seedPhase = seedComponent(seed, Double(layerIndex) * 3.7 + 1) * 2 * Double.pi
 
             let path = CGMutablePath()
             for i in 0...steps {
-                let tt = (Double(i) / Double(steps)) * 2 * Double.pi * Double(revolutions) + t * (0.05 + Double(layerIndex) * 0.008)
+                let tt = (Double(i) / Double(steps)) * 2 * Double.pi * Double(revolutions) + t * (0.05 + Double(layerIndex) * 0.008) + seedPhase
                 let x = (Rb - rb) * cos(tt) + d * cos(k * tt)
                 let y = (Rb - rb) * sin(tt) - d * sin(k * tt)
                 let point = CGPoint(x: CGFloat(x), y: CGFloat(y))
@@ -360,7 +385,7 @@ enum KaleidoscopeRenderer {
 
     // MARK: - 波の干渉（プロトタイプ renderWaves の移植）
 
-    private static func renderWaves(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
+    private static func renderWaves(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int, seed: UInt64) {
         // 線だけだと寂しく見えるため、(1) 隣り合う輪の間を半透明で塗って帯にする、
         // (2) 波の頂点に小さなきらめきを添える、(3) グローを強めにする、の3つで満たす。
         //
@@ -379,6 +404,12 @@ enum KaleidoscopeRenderer {
         let steps = 220
         var prevPts: [(x: Double, y: Double, mod: Double)]?
 
+        // 各周波数成分の位相オフセット。扇形全体（theta全域）に一様にかかるだけなので、
+        // 対称性（クリップ・鏡映・スタンプ）には影響せず、輪の「波打ち方」だけが日によって変わる。
+        let seedPhase1 = seedComponent(seed, 4.1) * 2 * Double.pi
+        let seedPhase2 = seedComponent(seed, 8.9) * 2 * Double.pi
+        let seedPhase3 = seedComponent(seed, 15.3) * 2 * Double.pi
+
         for ri in 0..<ringsToDraw {
             // 境界の1本（ちょうど整数を跨ぐ輪）だけはringFracをアルファに掛けてフェードさせる。
             let alphaMul = ri < ringCountFloor ? 1.0 : ringFrac
@@ -389,9 +420,9 @@ enum KaleidoscopeRenderer {
             pts.reserveCapacity(steps + 1)
             for i in 0...steps {
                 let theta = (Double(i) / Double(steps)) * 2 * Double.pi
-                let mod = sin(k1 * theta + t * 0.6) * amp
-                    + sin(k2 * theta - t * 0.9) * amp * 0.5
-                    + sin(k3 * theta + t * 0.3) * amp * 0.3
+                let mod = sin(k1 * theta + t * 0.6 + seedPhase1) * amp
+                    + sin(k2 * theta - t * 0.9 + seedPhase2) * amp * 0.5
+                    + sin(k3 * theta + t * 0.3 + seedPhase3) * amp * 0.3
                 let r = baseR + mod
                 pts.append((cos(theta) * r, sin(theta) * r, mod))
             }
@@ -468,7 +499,7 @@ enum KaleidoscopeRenderer {
         return tt * tt * (3 - 2 * tt)
     }
 
-    private static func renderFractal(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
+    private static func renderFractal(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int, seed: UInt64) {
         let wedgeAngle = (2 * Double.pi) / Double(n)
         // 密度を上げても「なんとなく長くなるだけ」にならないよう、分岐角は深さで割って
         // 縮めない（固定角）。かわりに: 幹の本数・分岐数・深さの3つを密度に応じて増やし、
@@ -555,6 +586,11 @@ enum KaleidoscopeRenderer {
             }
         }
 
+        // 幹（枝分かれの根）の乱数シードにseed由来のオフセットを足し込む。分岐関数branch()は
+        // このseed値を`sin`の位相などに使って揺れ方・伸び方を決めているため、これだけで
+        // 分岐全体の形が日ごとに変わる。
+        let daySeedOffset = seedComponent(seed, 9.9) * 1000
+
         let maxTrunkCount = 4
         let trunkCountF = 1 + detail * 3
         let trunkCountFloor = min(Int(floor(trunkCountF)), maxTrunkCount)
@@ -568,7 +604,7 @@ enum KaleidoscopeRenderer {
             // 角度が動かないようにする。
             let trunkAngle = wedgeAngle * (Double(i) + 0.5) / Double(maxTrunkCount)
             // 根元の幹を短く(中心からすぐ分岐させる)。これが中心付近の疎さの直接の原因だった。
-            branch(x: 0, y: 0, angle: trunkAngle, len: R * (0.10 - Double(i) * 0.006), depth: 0, seed: Double(i) * 7.31 + 1, alphaMul: alphaMul)
+            branch(x: 0, y: 0, angle: trunkAngle, len: R * (0.10 - Double(i) * 0.006), depth: 0, seed: Double(i) * 7.31 + 1 + daySeedOffset, alphaMul: alphaMul)
         }
     }
 

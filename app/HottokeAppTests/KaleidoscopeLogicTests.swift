@@ -165,6 +165,55 @@ final class KaleidoscopeLogicTests: XCTestCase {
         return maxDiff
     }
 
+    /// 実機フィードバック対応: 「同じスタイルだとほぼ同じ動画になる」不具合の再発防止テスト。
+    /// 以前はKaleidoscopeParameters.seedがどの描画関数にも渡されておらず、模様の形は
+    /// (R, t, detail, symmetryCount)だけで決まっていた。そのため同じ活動データ・同じ時刻
+    /// なら日をまたいでもピクセル単位でほぼ同じ模様になっていた。
+    /// ここでは同一の(size, symmetryCount, palette, time, detail, patternStyle)のまま
+    /// seedだけを変えて描画し、生成されるビットマップのピクセルデータが異なることを
+    /// 4スタイルすべてで確認する。
+    func testDifferentSeedProducesDifferentPatternForEachStyle() {
+        let size = CGSize(width: 240, height: 240)
+
+        for style in [PatternStyle.tiling, .spirograph, .waves, .fractal] {
+            var parametersA = KaleidoscopeParameters()
+            parametersA.symmetryCount = 8
+            parametersA.patternStyle = style
+            parametersA.time = 3.0
+            parametersA.detail = 0.6
+            parametersA.seed = 111
+
+            var parametersB = parametersA
+            parametersB.seed = 999
+
+            let pixelsA = renderedPixelData(size: size, parameters: parametersA)
+            let pixelsB = renderedPixelData(size: size, parameters: parametersB)
+
+            XCTAssertNotNil(pixelsA, "\(style): 描画に失敗しました")
+            XCTAssertNotNil(pixelsB, "\(style): 描画に失敗しました")
+            XCTAssertNotEqual(pixelsA, pixelsB, "\(style): seedを変えても模様のピクセルが変化しませんでした")
+        }
+    }
+
+    /// KaleidoscopeRenderer.renderを実行し、結果のCGContextからピクセルデータ(Data)を取り出す。
+    private func renderedPixelData(size: CGSize, parameters: KaleidoscopeParameters) -> Data? {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: Int(size.width),
+            height: Int(size.height),
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        KaleidoscopeRenderer.render(into: context, size: size, parameters: parameters)
+
+        guard let data = context.data else { return nil }
+        return Data(bytes: data, count: context.bytesPerRow * context.height)
+    }
+
     func testDominantMovingKindIgnoresStationary() {
         let now = Date()
         let data = DailyActivityData(
