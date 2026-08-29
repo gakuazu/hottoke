@@ -271,9 +271,22 @@ enum KaleidoscopeRenderer {
     private static func renderSpirograph(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
         // 層のRbを中心寄り〜外周まで広く分散させ、さらに中心にコアの発光を足して空洞を埋める
         // （層のRbが外周寄りの狭い帯に集まると中心付近ががら空きになっていた反省）。
-        let layers = 3 + Int((detail * 3).rounded()) // 3〜6層
-        for layerIndex in 0..<layers {
-            let spanT = layers == 1 ? 1.0 : Double(layerIndex) / Double(layers - 1)
+        //
+        // カクつき対策: layers（層数）はdetailの変化で整数がジャンプするが、各層のRbを
+        // 「その時点のlayers」で割ってしまうと、層が1本増減するたびに既存の層すべての
+        // 位置が同時にズレて見える。そこでspanTの分母は固定のmaxLayersにし、実際に
+        // 描く層数だけをdetailから連続的に決める（floor層は通常濃度、境界の1層は
+        // アルファでフェード、それ以降は描かない）。
+        let maxLayers = 6 // detail 0〜1で層数が3〜6まで変化する従来仕様の最大値に合わせる
+        let layersF = 3 + detail * 3
+        let layersFloor = min(Int(floor(layersF)), maxLayers)
+        let layerFrac = layersF - Double(layersFloor)
+        let layersToDraw = min(layersFloor + (layerFrac > 0.0001 ? 1 : 0), maxLayers)
+
+        for layerIndex in 0..<layersToDraw {
+            // 境界の1層（ちょうど整数を跨ぐ層）だけはlayerFracをアルファに掛けてフェードさせる。
+            let alphaMul = layerIndex < layersFloor ? 1.0 : layerFrac
+            let spanT = Double(layerIndex) / Double(maxLayers - 1)
             let Rb = R * (0.15 + 0.79 * spanT) // 中心近くから外周まで層を配置
             let rb = R / Double(n + 1 + layerIndex)
             let d = rb * (0.55 + 0.3 * detail)
@@ -293,14 +306,14 @@ enum KaleidoscopeRenderer {
 
             ctx.setStrokeColor(color)
             ctx.setLineWidth(1.5)
-            ctx.setAlpha(0.82)
+            ctx.setAlpha(0.82 * alphaMul)
             ctx.setBlendMode(.normal)
             ctx.addPath(path)
             ctx.strokePath()
 
             ctx.saveGState()
             ctx.setBlendMode(.plusLighter)
-            ctx.setAlpha(0.30)
+            ctx.setAlpha(0.30 * alphaMul)
             ctx.setLineWidth(5)
             ctx.setStrokeColor(color)
             ctx.addPath(path) // strokePath()後はカレントパスが空になるため再度addPathする
@@ -325,14 +338,27 @@ enum KaleidoscopeRenderer {
     private static func renderWaves(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
         // 線だけだと寂しく見えるため、(1) 隣り合う輪の間を半透明で塗って帯にする、
         // (2) 波の頂点に小さなきらめきを添える、(3) グローを強めにする、の3つで満たす。
-        let ringCount = 6 + Int((detail * 8).rounded())
+        //
+        // カクつき対策: 輪の本数(ringCount)はdetailの変化に応じて整数でジャンプするが、
+        // 各輪の半径を「その時点のringCount」で割ってしまうと、輪が1本増減するたびに
+        // 既存の輪すべての半径が同時にズレて見える。そこで半径の分母は固定の
+        // maxRingSlotsにし、実際に描く本数だけをdetailから連続的に決める
+        // （floor本は通常濃度、境界の1本はアルファでフェード、それ以降は描かない）。
+        let maxRingSlots = 14 // detail 0〜1で本数が6〜14まで変化する従来仕様の最大値に合わせる
+        let ringCountF = 6 + detail * 8
+        let ringCountFloor = min(Int(floor(ringCountF)), maxRingSlots)
+        let ringFrac = ringCountF - Double(ringCountFloor)
+        let ringsToDraw = min(ringCountFloor + (ringFrac > 0.0001 ? 1 : 0), maxRingSlots)
+
         let k1 = Double(n), k2 = Double(n) * 2, k3 = max(3.0, Double(n) - 2)
         let steps = 220
         var prevPts: [(x: Double, y: Double, mod: Double)]?
 
-        for ri in 0..<ringCount {
-            let baseR = R * Double(ri + 1) / Double(ringCount)
-            let amp = R * 0.05 * (1 - Double(ri) / Double(ringCount) * 0.35)
+        for ri in 0..<ringsToDraw {
+            // 境界の1本（ちょうど整数を跨ぐ輪）だけはringFracをアルファに掛けてフェードさせる。
+            let alphaMul = ri < ringCountFloor ? 1.0 : ringFrac
+            let baseR = R * Double(ri + 1) / Double(maxRingSlots)
+            let amp = R * 0.05 * (1 - Double(ri) / Double(maxRingSlots) * 0.35)
             let color = palette[ri % palette.count]
             var pts: [(x: Double, y: Double, mod: Double)] = []
             pts.reserveCapacity(steps + 1)
@@ -347,7 +373,7 @@ enum KaleidoscopeRenderer {
 
             if let prevPts {
                 ctx.setBlendMode(.normal)
-                ctx.setAlpha(0.11)
+                ctx.setAlpha(0.11 * alphaMul)
                 ctx.setFillColor(color)
                 let band = CGMutablePath()
                 band.move(to: CGPoint(x: prevPts[0].x, y: prevPts[0].y))
@@ -365,14 +391,14 @@ enum KaleidoscopeRenderer {
 
             ctx.setStrokeColor(color)
             ctx.setLineWidth(1.3)
-            ctx.setAlpha(0.68)
+            ctx.setAlpha(0.68 * alphaMul)
             ctx.setBlendMode(.normal)
             ctx.addPath(ring)
             ctx.strokePath()
 
             ctx.saveGState()
             ctx.setBlendMode(.plusLighter)
-            ctx.setAlpha(0.26)
+            ctx.setAlpha(0.26 * alphaMul)
             ctx.setLineWidth(4.5)
             ctx.setStrokeColor(color)
             ctx.addPath(ring)
@@ -386,7 +412,7 @@ enum KaleidoscopeRenderer {
             while i < pts.count {
                 let point = pts[i]
                 if point.mod > amp * 0.5 {
-                    ctx.setAlpha(0.55)
+                    ctx.setAlpha(0.55 * alphaMul)
                     let sparkSize = R * 0.014
                     ctx.fillEllipse(in: CGRect(x: point.x - sparkSize / 2, y: point.y - sparkSize / 2, width: sparkSize, height: sparkSize))
                 }
@@ -402,38 +428,72 @@ enum KaleidoscopeRenderer {
         ctx.setBlendMode(.normal)
         ctx.setAlpha(0.14)
         ctx.setFillColor(palette[0])
-        let innerRadius = R / Double(ringCount) * 0.85
+        let innerRadius = R / Double(maxRingSlots) * 0.85
         ctx.fillEllipse(in: CGRect(x: -innerRadius, y: -innerRadius, width: innerRadius * 2, height: innerRadius * 2))
         ctx.restoreGState()
     }
 
     // MARK: - フラクタル分岐（プロトタイプ renderFractal の移植）
 
+    /// エルミート補間によるなめらかな0→1の立ち上がり（Swiftにsmoothstepがないため自前定義）。
+    /// detailなどの連続値から「境界の1つだけをじわっとフェードさせる」係数を作るのに使う。
+    private static func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {
+        guard edge1 != edge0 else { return x < edge0 ? 0 : 1 }
+        let tt = min(1, max(0, (x - edge0) / (edge1 - edge0)))
+        return tt * tt * (3 - 2 * tt)
+    }
+
     private static func renderFractal(ctx: CGContext, R: Double, palette: [CGColor], t: Double, detail: Double, n: Int) {
         let wedgeAngle = (2 * Double.pi) / Double(n)
         // 密度を上げても「なんとなく長くなるだけ」にならないよう、分岐角は深さで割って
         // 縮めない（固定角）。かわりに: 幹の本数・分岐数・深さの3つを密度に応じて増やし、
         // 込み入り方そのものが変わるようにする。
-        let bushy = detail > 0.62
-        let childCount = bushy ? 3 : 2
-        let maxDepth = bushy ? (4 + Int((detail * 3).rounded())) : (4 + Int((detail * 6).rounded()))
+        //
+        // カクつき対策: 以前はchildCount(2→3)・maxDepth・trunkCountがdetailの閾値／四捨五入で
+        // フレーム間に整数として突然切り替わり、特に枝分かれ構造が丸ごと変わるchildCountの
+        // 切り替えが目立つカクつきの原因だった。そこで「表示スロット数は固定にし、実際に
+        // 見せるか・どれだけ濃く見せるかをdetailから連続値で決める」方式に統一する:
+        //   - 子枝は常に3本ぶんの角度を計算するが、3本目はdetailからなめらかに
+        //     立ち上がるfadeT(0〜1)をアルファに掛けてフェードイン/アウトさせる。
+        //   - 深さはfloor本まで通常描画し、境界の1層だけアルファをフェードさせてから
+        //     それ以上は描かない。
+        //   - 幹の本数も同様（角度は固定本数ぶん常に計算し、実際に使う本数だけを
+        //     floor本+境界1本のフェードで決める）。
         let branchSpread = 0.30 + detail * 0.22 // ラジアン。深さに関係なく毎回この角度で開く。
-        let trunkCount = 1 + Int((detail * 3).rounded()) // 1〜4本の幹を扇形内に分散配置。
+        let fadeT = smoothstep(0.45, 0.8, detail) // 3本目の子枝の濃さ（0=見えない〜1=通常濃度）
+
+        let maxDepthF = 4 + detail * 6
+        let maxDepthFloor = Int(floor(maxDepthF))
+        let depthFrac = maxDepthF - Double(maxDepthFloor)
+        // 実際に線を引く最大の深さ（境界のフェード層を含む）。線幅の基準にも使う。
+        let effectiveMaxDepth = maxDepthFloor + 1
+
         ctx.setLineCap(.round)
 
-        func branch(x: Double, y: Double, angle: Double, len: Double, depth: Int, seed: Double) {
-            if depth > maxDepth || len < R * 0.011 {
-                // 枝先に小さな輝きを添えて、伸びた先が単に途切れるのではなく
-                // 「芽吹いている」ように見せる（キラキラ感の継続）。
-                ctx.saveGState()
-                ctx.setBlendMode(.plusLighter)
-                ctx.setAlpha(0.5)
-                ctx.setFillColor(palette[depth % palette.count])
-                let glowSize = R * 0.012
-                ctx.fillEllipse(in: CGRect(x: x - glowSize / 2, y: y - glowSize / 2, width: glowSize, height: glowSize))
-                ctx.restoreGState()
+        func drawLeafGlow(x: Double, y: Double, depth: Int, alphaMul: Double) {
+            guard alphaMul > 0.0001 else { return }
+            // 枝先に小さな輝きを添えて、伸びた先が単に途切れるのではなく
+            // 「芽吹いている」ように見せる（キラキラ感の継続）。
+            ctx.saveGState()
+            ctx.setBlendMode(.plusLighter)
+            ctx.setAlpha(0.5 * alphaMul)
+            ctx.setFillColor(palette[depth % palette.count])
+            let glowSize = R * 0.012
+            ctx.fillEllipse(in: CGRect(x: x - glowSize / 2, y: y - glowSize / 2, width: glowSize, height: glowSize))
+            ctx.restoreGState()
+        }
+
+        func branch(x: Double, y: Double, angle: Double, len: Double, depth: Int, seed: Double, alphaMul: Double) {
+            if len < R * 0.011 {
+                drawLeafGlow(x: x, y: y, depth: depth, alphaMul: alphaMul)
                 return
             }
+            // 境界の1層（floor+1階層目）だけはdepthFracをアルファに掛けてフェードさせ、
+            // その先へは分岐させない（それ以上のdepthに到達することはない）。
+            let depthAlphaMul = depth == maxDepthFloor + 1 ? depthFrac : 1.0
+            let totalAlphaMul = alphaMul * depthAlphaMul
+            guard totalAlphaMul > 0.0001 else { return }
+
             let wig = sin(t * 0.8 + Double(depth) * 1.3 + seed) * 0.05
             let nx = x + cos(angle + wig) * len
             let ny = y + sin(angle + wig) * len
@@ -443,27 +503,47 @@ enum KaleidoscopeRenderer {
             path.move(to: CGPoint(x: x, y: y))
             path.addLine(to: CGPoint(x: nx, y: ny))
             ctx.setStrokeColor(color)
-            ctx.setLineWidth(max(0.5, Double(maxDepth - depth) * 0.42))
-            ctx.setAlpha(0.78)
+            ctx.setLineWidth(max(0.5, Double(effectiveMaxDepth - depth) * 0.42))
+            ctx.setAlpha(0.78 * totalAlphaMul)
             ctx.setBlendMode(.normal)
             ctx.addPath(path)
             ctx.strokePath()
+
+            if depth == maxDepthFloor + 1 {
+                // ここが今回描く最後の階層。これ以上は分岐させず、先端の輝きだけ添えて打ち切る。
+                drawLeafGlow(x: nx, y: ny, depth: depth, alphaMul: totalAlphaMul)
+                return
+            }
 
             // depth 0（幹の根元）だけは次の枝を長く伸ばし直す。中心から最初の分岐点までの
             // 「幹」を短くすることで、中央がまばらにならず、根元近くからすぐ枝分かれが
             // 始まるようにする（幹を長くしたまま縮小率だけ掛けると中心付近に空白ができる）。
             let nextLen = depth == 0 ? R * 0.32 : len * (0.68 + 0.06 * sin(seed * 3))
-            for c in 0..<childCount {
-                let spreadFactor = Double(c) - Double(childCount - 1) / 2
+            // 子枝は常に3本ぶんの角度を計算する（spreadFactorの分母を固定することで、
+            // 本数が変わっても既存の2本の角度は動かない）。3本目だけfadeTでフェードさせる。
+            for c in 0..<3 {
+                let spreadFactor = Double(c) - 1.0 // -1, 0, 1
                 let childAngle = angle + spreadFactor * branchSpread + sin(seed + Double(c)) * 0.05
-                branch(x: nx, y: ny, angle: childAngle, len: nextLen, depth: depth + 1, seed: seed * 1.618 + Double(c) + 1)
+                let childAlphaMul = c == 2 ? totalAlphaMul * fadeT : totalAlphaMul
+                guard childAlphaMul > 0.0001 else { continue }
+                branch(x: nx, y: ny, angle: childAngle, len: nextLen, depth: depth + 1, seed: seed * 1.618 + Double(c) + 1, alphaMul: childAlphaMul)
             }
         }
 
-        for i in 0..<trunkCount {
-            let trunkAngle = wedgeAngle * (Double(i) + 0.5) / Double(trunkCount)
+        let maxTrunkCount = 4
+        let trunkCountF = 1 + detail * 3
+        let trunkCountFloor = min(Int(floor(trunkCountF)), maxTrunkCount)
+        let trunkFrac = trunkCountF - Double(trunkCountFloor)
+        let trunksToDraw = min(trunkCountFloor + (trunkFrac > 0.0001 ? 1 : 0), maxTrunkCount)
+
+        for i in 0..<trunksToDraw {
+            // 境界の1本（ちょうど整数を跨ぐ幹）だけはtrunkFracをアルファに掛けてフェードさせる。
+            let alphaMul = i < trunkCountFloor ? 1.0 : trunkFrac
+            // 角度はmaxTrunkCount（固定）で割ることで、幹の本数が変わっても既存の幹の
+            // 角度が動かないようにする。
+            let trunkAngle = wedgeAngle * (Double(i) + 0.5) / Double(maxTrunkCount)
             // 根元の幹を短く(中心からすぐ分岐させる)。これが中心付近の疎さの直接の原因だった。
-            branch(x: 0, y: 0, angle: trunkAngle, len: R * (0.10 - Double(i) * 0.006), depth: 0, seed: Double(i) * 7.31 + 1)
+            branch(x: 0, y: 0, angle: trunkAngle, len: R * (0.10 - Double(i) * 0.006), depth: 0, seed: Double(i) * 7.31 + 1, alphaMul: alphaMul)
         }
     }
 

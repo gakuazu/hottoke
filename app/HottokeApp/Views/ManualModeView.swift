@@ -13,6 +13,10 @@ struct ManualModeView: View {
     @State private var dragRotation: Double = 0
     @State private var popScale: CGFloat = 1.0
     @State private var startTime: TimeInterval = Date.timeIntervalSinceReferenceDate
+    // パネルが模様の下半分を覆ってしまう問題への対処。ヘッダー行をタップすると
+    // スライダー・スウォッチ群を折りたたみ、ヘッダーだけの薄い帯にできる
+    // （ブラウザプロトタイプの.panel-inner.collapsedと同じ考え方）。
+    @State private var isPanelCollapsed = false
     // 振った瞬間の「ポン」という視覚フィードバック用。triggerShuffle()でこの時刻を記録し、
     // TimelineViewの毎フレームでそこからの経過時間に応じてradialBurstを1→0へ減衰させる。
     // （KaleidoscopeCanvasViewはUIViewRepresentableでAnimatableではないため、
@@ -92,36 +96,40 @@ struct ManualModeView: View {
         VStack {
             Spacer()
             VStack(alignment: .leading, spacing: 14) {
-                Label("振ってシャッフル / 傾けて回転", systemImage: "hand.draw")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.85))
+                panelHeader
 
-                HStack(spacing: 10) {
-                    ForEach(PatternStyle.allCases) { style in
-                        styleSwatch(style)
+                if !isPanelCollapsed {
+                    Label("振ってシャッフル / 傾けて回転", systemImage: "hand.draw")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.85))
+
+                    HStack(spacing: 10) {
+                        ForEach(PatternStyle.allCases) { style in
+                            styleSwatch(style)
+                        }
                     }
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("対称数: \(Int(symmetryCount))")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.8))
-                    Slider(value: $symmetryCount, in: 4...16, step: 1)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("密度・複雑さ")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.8))
-                    Slider(value: $detail, in: 0...1)
-                }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("速度")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.8))
-                    Slider(value: $speed, in: 0...1)
-                }
-                HStack(spacing: 10) {
-                    ForEach(KaleidoscopePalette.all) { item in
-                        paletteSwatch(item)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("対称数: \(Int(symmetryCount))")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                        Slider(value: $symmetryCount, in: 4...16, step: 1)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("密度・複雑さ")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                        Slider(value: $detail, in: 0...1)
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("速度")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.8))
+                        Slider(value: $speed, in: 0...1)
+                    }
+                    HStack(spacing: 10) {
+                        ForEach(KaleidoscopePalette.all) { item in
+                            paletteSwatch(item)
+                        }
                     }
                 }
             }
@@ -130,6 +138,29 @@ struct ManualModeView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
+    }
+
+    /// パネル上部のヘッダー行。現在のスタイル名とシェブロンを表示し、タップで
+    /// パネルの折りたたみ/展開を切り替える（模様の下半分が隠れてしまう不具合の対処）。
+    private var panelHeader: some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                isPanelCollapsed.toggle()
+            }
+        } label: {
+            HStack {
+                Text(patternStyle.displayName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.92))
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .rotationEffect(.degrees(isPanelCollapsed ? -90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func styleSwatch(_ style: PatternStyle) -> some View {
