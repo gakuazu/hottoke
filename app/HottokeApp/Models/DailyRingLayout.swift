@@ -288,12 +288,16 @@ enum DailyRingLayout {
             let fbw = walkingFallback[hour]
             if fbw > 0 {
                 fractions[.walking] = max(fractions[.walking] ?? 0, fbw)
-                let others = (fractions[.walking] ?? 0) + (fractions[.running] ?? 0) + (fractions[.cycling] ?? 0) + (fractions[.automotive] ?? 0)
+                var others = 0.0
+                for kind in kindOrder where kind != .stationary {
+                    others += fractions[kind] ?? 0
+                }
                 fractions[.stationary] = max(0, 1 - others)
                 coverage = 1
             }
 
-            let sum = kindOrder.reduce(0.0) { $0 + (fractions[$1] ?? 0) }
+            var sum = 0.0
+            for kind in kindOrder { sum += fractions[kind] ?? 0 }
             guard sum > 0 else { continue }
 
             var densityFactor = 0.0
