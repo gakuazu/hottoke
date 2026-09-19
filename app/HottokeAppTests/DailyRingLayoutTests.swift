@@ -220,9 +220,9 @@ final class DailyRingLayoutTests: XCTestCase {
 
     private func typicalDay(day: Int = 18) -> DailyActivityData {
         let segs = segments(day: day, [
-            (0, 0, 7, 0, .stationary), (7, 0, 7, 30, .walking), (7, 30, 8, 15, .stationary), (8, 15, 8, 45, .walking),
+            (0, 0, 7, 0, .sleeping), (7, 0, 7, 30, .walking), (7, 30, 8, 15, .stationary), (8, 15, 8, 45, .walking),
             (8, 45, 12, 0, .stationary), (12, 0, 12, 25, .walking), (12, 25, 17, 30, .stationary),
-            (17, 30, 18, 10, .walking), (18, 10, 18, 35, .running), (18, 35, 19, 20, .walking), (19, 20, 24, 0, .stationary)
+            (17, 30, 18, 10, .walking), (18, 10, 18, 35, .running), (18, 35, 19, 20, .walking), (19, 20, 23, 15, .stationary), (23, 15, 24, 0, .sleeping)
         ])
         let hourly = steps([7: 1800, 8: 1500, 12: 2200, 17: 2000, 18: 3400, 19: 1500])
         return makeData(day: date(2026, 9, day), hourlySteps: hourly, segments: segs)

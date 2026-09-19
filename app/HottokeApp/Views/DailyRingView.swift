@@ -23,6 +23,8 @@ final class DailyRingStore: ObservableObject {
     }
 
     /// 最新データを取得して描き直す。すでに取得中なら何もしない。
+    /// ・取得した日ごとの要約は、端末内の履歴（DailyHistoryStore）に保存する。
+    /// ・端末の履歴が残っていない古い日は、保存済みの要約から描く（なければ「データなし」）。
     func refresh() async {
         guard !isLoading else { return }
         isLoading = true
@@ -30,33 +32,53 @@ final class DailyRingStore: ObservableObject {
         defer { isLoading = false }
 
         let now = Date()
+        let calendar = Calendar.current
         let target = date ?? now
+        let history = DailyHistoryStore.shared
 
-        if !isToday && !DailyRingLayout.isWithinRetention(date: target, now: now) {
+        var slices: DailyRingSlices?
+        if isToday || DailyRingLayout.isWithinRetention(date: target, now: now) {
+            let data = await service.fetch(for: target, includeHourlySteps: true)
+            let fresh = DailyRingLayout.makeSlices(data: data, now: now, calendar: calendar)
+            if fresh.hasAnyData {
+                history.save(fresh)
+                slices = fresh
+            } else if let saved = history.record(for: target) {
+                slices = saved
+            } else if isToday {
+                slices = fresh // 今日はまだデータがなくても、空の輪と現在時刻の目印を出す
+            }
+        } else {
+            slices = history.record(for: target)
+        }
+
+        guard let slices else {
             image = nil
             stepCount = 0
             lastUpdated = now
-            noDataMessage = "この日のデータは端末に残っていません。iPhoneが保持している歩数・活動の履歴は、おおむね直近1週間ほどです。"
+            noDataMessage = DailyRingLayout.isWithinRetention(date: target, now: now)
+                ? "この日の歩数・活動のデータがありません。"
+                : "この日のデータは端末に残っていません。iPhoneが保持している歩数・活動の履歴は、おおむね直近1週間ほどです（このアプリは、開いた日から日ごとの要約を保存しています）。"
             return
         }
 
-        let data = await service.fetch(for: target, includeHourlySteps: true)
-        if !isToday && data.stepCount == 0 && data.segments.isEmpty {
-            image = nil
-            stepCount = 0
-            lastUpdated = now
-            noDataMessage = "この日の歩数・活動のデータがありません。"
-            return
-        }
-
+        let day = calendar.startOfDay(for: target)
         let rendered = await Task.detached(priority: .userInitiated) { () -> UIImage in
-            let density = DailyRingLayout.makeDensity(data: data, now: now)
-            return DailyRingRenderer.render(density: density, date: data.date)
+            let density = DailyRingLayout.makeDensity(slices: slices)
+            return DailyRingRenderer.render(density: density, date: day)
         }.value
 
         image = rendered
-        stepCount = data.stepCount
+        stepCount = slices.totalSteps
         lastUpdated = now
+
+        // 今日を開いたときは、ついでに直近の他の日も取り直して保存する（アーカイブ・積算のため）。
+        if isToday {
+            let service = self.service
+            Task { @MainActor in
+                await history.syncRecentDays(service: service, includeToday: false)
+            }
+        }
     }
 }
 

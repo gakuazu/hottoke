@@ -40,6 +40,10 @@
 		A5CBE56FAA14403E9FA0D73C /* DailyRingLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */; };
 		B3FC32C490CE496DA98F4F4C /* SleepEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0E1B0C6AD5B48ECB76ECC19 /* SleepEstimator.swift */; };
 		7B8C8D855AD34E52A530C70E /* SleepEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */; };
+		519630146B694AA584EABC75 /* DailyHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CC25E0662274AEC898BDDF8 /* DailyHistoryStore.swift */; };
+		ED41E35342C54ACBB6DFE9C2 /* RingThumbnailStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFBF480B92DB438A8EF4C0D9 /* RingThumbnailStore.swift */; };
+		3E7D303D86BF4D68857A588A /* RingTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DBC0E1422FB4BB784880F54 /* RingTheme.swift */; };
+		3B32EB050C644FA59E4B5245 /* DailyHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92B755D1C99B45D9ABCC151A /* DailyHistoryTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +93,10 @@
 		3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRingLayoutTests.swift; sourceTree = "<group>"; };
 		E0E1B0C6AD5B48ECB76ECC19 /* SleepEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepEstimator.swift; sourceTree = "<group>"; };
 		18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepEstimatorTests.swift; sourceTree = "<group>"; };
+		2CC25E0662274AEC898BDDF8 /* DailyHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyHistoryStore.swift; sourceTree = "<group>"; };
+		BFBF480B92DB438A8EF4C0D9 /* RingThumbnailStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingThumbnailStore.swift; sourceTree = "<group>"; };
+		9DBC0E1422FB4BB784880F54 /* RingTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingTheme.swift; sourceTree = "<group>"; };
+		92B755D1C99B45D9ABCC151A /* DailyHistoryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyHistoryTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -147,6 +155,7 @@
 		B1791874F6FC1762A1275743 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				9DBC0E1422FB4BB784880F54 /* RingTheme.swift */,
 				E0E1B0C6AD5B48ECB76ECC19 /* SleepEstimator.swift */,
 				8018C9C258744094A63C9517 /* DailyRingLayout.swift */,
 				DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */,
@@ -177,6 +186,8 @@
 		C2FD749825D3D47EB56DE19A /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				BFBF480B92DB438A8EF4C0D9 /* RingThumbnailStore.swift */,
+				2CC25E0662274AEC898BDDF8 /* DailyHistoryStore.swift */,
 				0DB0F57EF8D6CF642042DFE0 /* ActivityDataService.swift */,
 				A90B92C3943443C39AABE417 /* ArchivePatternStore.swift */,
 				9F9A4078225EBCF8BBD539A3 /* KaleidoscopeVideoExporter.swift */,
@@ -190,6 +201,7 @@
 		CBC2F7D239C5059FF39FBF19 /* HottokeAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				92B755D1C99B45D9ABCC151A /* DailyHistoryTests.swift */,
 				18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */,
 				3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */,
 				2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */,
@@ -280,6 +292,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3B32EB050C644FA59E4B5245 /* DailyHistoryTests.swift in Sources */,
 				7B8C8D855AD34E52A530C70E /* SleepEstimatorTests.swift in Sources */,
 				A5CBE56FAA14403E9FA0D73C /* DailyRingLayoutTests.swift in Sources */,
 				8057CEED4BDEE521B444BA03 /* KaleidoscopeLogicTests.swift in Sources */,
@@ -290,6 +303,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				3E7D303D86BF4D68857A588A /* RingTheme.swift in Sources */,
+				ED41E35342C54ACBB6DFE9C2 /* RingThumbnailStore.swift in Sources */,
+				519630146B694AA584EABC75 /* DailyHistoryStore.swift in Sources */,
 				B3FC32C490CE496DA98F4F4C /* SleepEstimator.swift in Sources */,
 				4C91C7EB2C1147C0B5B6C32C /* DailyRingView.swift in Sources */,
 				8C077A57AC634DC6804CE45C /* DailyRingRenderer.swift in Sources */,

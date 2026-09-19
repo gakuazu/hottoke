@@ -42,6 +42,41 @@ enum DailyRingRenderer {
         }
     }
 
+    /// アーカイブ用のサムネイル（文字・目盛りなしの簡易描画）。小さくても点が見えるよう、点は大きめに描く。
+    static func renderThumbnail(slices: DailyRingSlices, size: CGFloat = 240, theme: RingTheme = .standard) -> UIImage {
+        let side = max(32, size)
+        let center = CGPoint(x: side / 2, y: side / 2)
+        let rMax = side * 0.47
+        let density = DailyRingLayout.makeDensity(slices: slices)
+        let digits = slices.dateKey.filter { $0.isNumber }
+        let dots = DailyRingLayout.makeDots(density: density, seed: UInt64(digits) ?? 1)
+        let dotScale: CGFloat = 2.6
+
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format)
+        return renderer.image { rc in
+            let ctx = rc.cgContext
+            ctx.setFillColor(CGColor(red: 0.012, green: 0.014, blue: 0.04, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: side, height: side))
+            if let g = gradient(0.10, 0.11, 0.26, 0.9) {
+                ctx.drawRadialGradient(g, startCenter: center, startRadius: 0, endCenter: center, endRadius: side * 0.6, options: [])
+            }
+            ctx.setBlendMode(.plusLighter)
+            let baseRadius = rMax * CGFloat(DailyRingLayout.dotRadiusFraction) * dotScale
+            for dot in dots where dot.role != .bokeh {
+                let base = theme.color(for: dot.kind)
+                let c = lighten(base, 0.04 + 0.30 * pow(dot.depth, 2.4) * dot.brightness)
+                let alphaScale: CGFloat = (dot.kind == .stationary || dot.kind == .sleeping) ? 0.55 : 1.0
+                let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
+                let rad = baseRadius * CGFloat(dot.size)
+                ctx.setFillColor(red: c.r, green: c.g, blue: c.b, alpha: CGFloat(dot.brightness) * 0.85 * alphaScale)
+                ctx.fillEllipse(in: CGRect(x: p.x - rad, y: p.y - rad, width: rad * 2, height: rad * 2))
+            }
+        }
+    }
+
     private static func daySeed(date: Date, calendar: Calendar) -> UInt64 {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return UInt64((c.year ?? 2026) * 10_000 + (c.month ?? 1) * 100 + (c.day ?? 1))

@@ -8,6 +8,9 @@ struct CalendarArchiveView: View {
     @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
     @State private var selection: DateSelection?
     @State private var showUnavailableAlert = false
+    @ObservedObject private var history = DailyHistoryStore.shared
+    @StateObject private var thumbnails = ArchiveThumbnailProvider()
+    @Environment(\.scenePhase) private var scenePhase
 
     private var calendar: Calendar { Calendar.current }
 
@@ -28,10 +31,24 @@ struct CalendarArchiveView: View {
                     .padding(.horizontal, 16)
                     legend
                         .padding(.horizontal, 16)
+                    historyNote
+                        .padding(.horizontal, 16)
                 }
                 .padding(.vertical, 16)
             }
             .navigationTitle("アーカイブ")
+            // 開いたとき・前面に戻したときに、直近7日ぶんを取り直して保存する（今日の分も更新される）。
+            .task {
+                await history.syncRecentDays(service: ActivityDataService())
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                Task { await history.syncRecentDays(service: ActivityDataService()) }
+            }
+            // 表示中の月の保存済みの日のサムネイルを用意する（保存が増えたときも作り直す）。
+            .task(id: thumbnailTaskID) {
+                await thumbnails.load(records: monthRecords, theme: .standard)
+            }
             .sheet(item: $selection) { selection in
                 ArchiveDayDetailView(date: selection.date)
             }
@@ -76,7 +93,7 @@ struct CalendarArchiveView: View {
     }
 
     private var calendarGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 10) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
             ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
                 dayCell(date: date)
             }
@@ -85,7 +102,7 @@ struct CalendarArchiveView: View {
 
     private var legend: some View {
         VStack(alignment: .leading, spacing: 6) {
-            legendRow(color: .blue.opacity(0.75), text: "その日の「1日の輪」を見られる日（直近約1週間）")
+            legendRow(color: .blue.opacity(0.75), text: "その日の「1日の輪」を見られる日（直近約1週間、または保存済みの日）")
             legendRow(color: Color.secondary.opacity(0.06), text: "端末に記録が残っておらず、見られない日")
         }
         .font(.caption2)
@@ -102,32 +119,68 @@ struct CalendarArchiveView: View {
     @ViewBuilder
     private func dayCell(date: Date?) -> some View {
         if let date {
+            let key = DailyRingSlices.dateKey(for: date, calendar: calendar)
             let isFuture = calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
             let isToday = calendar.isDateInToday(date)
-            let available = !isFuture && DailyRingLayout.isWithinRetention(date: date, now: Date(), calendar: calendar)
+            let saved = history.record(forKey: key)?.hasAnyData ?? false
+            let available = !isFuture && (saved || DailyRingLayout.isWithinRetention(date: date, now: Date(), calendar: calendar))
+            let thumbnail = thumbnails.images[key]
 
             Button {
                 handleTap(date: date, isFuture: isFuture, available: available)
             } label: {
                 ZStack {
-                    Circle()
-                        .fill(fillColor(isFuture: isFuture, available: available))
-                        .frame(width: 36, height: 36)
+                    if let thumbnail {
+                        Image(uiImage: thumbnail)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 44, height: 44)
+                            .clipShape(Circle())
+                    } else {
+                        Circle()
+                            .fill(fillColor(isFuture: isFuture, available: available))
+                            .frame(width: 44, height: 44)
+                    }
                     if isToday {
                         Circle()
                             .stroke(Color.accentColor, lineWidth: 2)
-                            .frame(width: 36, height: 36)
+                            .frame(width: 44, height: 44)
                     }
                     Text("\(calendar.component(.day, from: date))")
-                        .font(.footnote)
-                        .foregroundStyle(isFuture ? Color.secondary.opacity(0.4) : .primary)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(isFuture ? Color.secondary.opacity(0.4) : .white.opacity(thumbnail == nil ? 1 : 0.8))
+                        .shadow(color: .black.opacity(0.8), radius: 2)
                 }
             }
             .disabled(isFuture)
             .frame(maxWidth: .infinity)
         } else {
-            Color.clear.frame(width: 36, height: 36).frame(maxWidth: .infinity)
+            Color.clear.frame(width: 44, height: 44).frame(maxWidth: .infinity)
         }
+    }
+
+    /// 表示中の月の、保存済みの記録。
+    private var monthRecords: [DailyRingSlices] {
+        guard let interval = calendar.dateInterval(of: .month, for: displayedMonth) else { return [] }
+        let startKey = DailyRingSlices.dateKey(for: interval.start, calendar: calendar)
+        let endKey = DailyRingSlices.dateKey(for: interval.end.addingTimeInterval(-1), calendar: calendar)
+        return history.records.values.filter { $0.dateKey >= startKey && $0.dateKey <= endKey && $0.hasAnyData }
+    }
+
+    private var thumbnailTaskID: String {
+        "\(DailyRingSlices.dateKey(for: displayedMonth, calendar: calendar))-\(history.revision)"
+    }
+
+    /// 保存の状況の説明。1ヶ月の積算は、保存が始まった日から貯まる。
+    private var historyNote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("保存済み \(history.savedDayCount)日分")
+                .font(.footnote.bold())
+            Text("iPhoneが残している歩数・活動の履歴は直近約1週間ですが、このアプリは開くたびに日ごとの要約を端末の中に保存しています。1ヶ月の積算や、1週間より前の日のアーカイブは、保存を始めた日から貯まっていきます。")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func fillColor(isFuture: Bool, available: Bool) -> Color {

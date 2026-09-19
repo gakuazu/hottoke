@@ -106,7 +106,7 @@ enum DailyRingLayout {
     static func ringColor(for kind: ActivityKind) -> RingRGB {
         switch ringKind(for: kind) {
         case .stationary: return rgb(hex: "#5b79ff") // 青
-        case .sleeping: return rgb(hex: "#4a3fd6")   // 深い藍
+        case .sleeping: return rgb(hex: "#5d2fcf")   // 深い藍
         case .automotive: return rgb(hex: "#d27cff") // 紫
         case .cycling: return rgb(hex: "#ffb43e")    // 琥珀
         case .walking: return rgb(hex: "#4fe8b0")    // ミント
@@ -277,20 +277,58 @@ enum DailyRingLayout {
         return result
     }
 
-    static func makeDensity(data: DailyActivityData, now: Date, calendar: Calendar = .current) -> DailyRingDensity {
+    /// その日の活動データを、5分スライスごとの「種類ごとの秒数」と1時間ごとの歩数にまとめる（保存・集計の単位）。
+    static func makeSlices(data: DailyActivityData, now: Date, calendar: Calendar = .current) -> DailyRingSlices {
         let dayStart = calendar.startOfDay(for: data.date)
         let drawn = drawnHours(forDayStarting: dayStart, now: now, calendar: calendar)
         let sliceCount = min(slicesPerDay, max(0, Int(ceil(drawn / sliceHours - 1e-9))))
+        var seconds: [String: [Int]] = [:]
+        for kind in kindOrder { seconds[kind.rawValue] = [Int](repeating: 0, count: sliceCount) }
+        for i in 0..<sliceCount {
+            let t0 = Double(i) * sliceHours
+            let t1 = min(drawn, t0 + sliceHours)
+            guard t1 > t0 else { continue }
+            let start = dayStart.addingTimeInterval(t0 * 3600)
+            let end = dayStart.addingTimeInterval(t1 * 3600)
+            let bySecond = secondsByKind(segments: data.segments, from: start, to: end)
+            for kind in kindOrder {
+                seconds[kind.rawValue]?[i] = Int((bySecond[kind] ?? 0).rounded())
+            }
+        }
+        var hourly = data.hourlySteps
+        if hourly.count < 24 { hourly += [Int](repeating: 0, count: 24 - hourly.count) }
+        return DailyRingSlices(
+            dateKey: DailyRingSlices.dateKey(for: dayStart, calendar: calendar),
+            drawnHours: drawn,
+            sliceSeconds: seconds,
+            hourlySteps: Array(hourly.prefix(24)),
+            savedAt: now
+        )
+    }
+
+    static func makeDensity(data: DailyActivityData, now: Date, calendar: Calendar = .current) -> DailyRingDensity {
+        makeDensity(slices: makeSlices(data: data, now: now, calendar: calendar))
+    }
+
+    /// 5分スライスの集計から、強さ・密度・色の割合を作る。
+    static func makeDensity(slices: DailyRingSlices) -> DailyRingDensity {
+        let drawn = slices.drawnHours
+        let sliceCount = slices.sliceCount
 
         // 1時間ごとの補正: 歩行・走行の1分あたり歩数、歩数の多さによる濃さ、活動区間の検出漏れの補い。
         var cadence = [Double](repeating: defaultCadence, count: 24)
         var stepFactor = [Double](repeating: 1, count: 24)
         var walkingFallback = [Double](repeating: 0, count: 24)
         for hour in 0..<24 {
-            let hourStart = dayStart.addingTimeInterval(Double(hour) * 3600)
-            let seconds = secondsByKind(segments: data.segments, from: hourStart, to: hourStart.addingTimeInterval(3600))
-            let movingMinutes = ((seconds[.walking] ?? 0) + (seconds[.running] ?? 0)) / 60
-            let steps = hour < data.hourlySteps.count ? max(0, data.hourlySteps[hour]) : 0
+            var movingSeconds = 0.0
+            let lo = hour * 12, hi = min(sliceCount, hour * 12 + 12)
+            if lo < hi {
+                for i in lo..<hi {
+                    movingSeconds += Double(slices.seconds(.walking, slice: i) + slices.seconds(.running, slice: i))
+                }
+            }
+            let movingMinutes = movingSeconds / 60
+            let steps = hour < slices.hourlySteps.count ? max(0, slices.hourlySteps[hour]) : 0
             if movingMinutes >= 5 {
                 if steps > 0 { cadence[hour] = min(maximumCadence, Double(steps) / movingMinutes) }
                 let ratio = Double(steps) / (movingMinutes * referenceStepsPerMinute)
@@ -317,9 +355,8 @@ enum DailyRingLayout {
             let t1 = min(drawn, t0 + sliceHours)
             let coveredSeconds = (t1 - t0) * 3600
             guard coveredSeconds > 1 else { continue }
-            let start = dayStart.addingTimeInterval(t0 * 3600)
-            let end = dayStart.addingTimeInterval(t1 * 3600)
-            let seconds = secondsByKind(segments: data.segments, from: start, to: end)
+            var seconds: [ActivityKind: Double] = [:]
+            for kind in kindOrder { seconds[kind] = Double(slices.seconds(kind, slice: i)) }
             let hour = min(23, Int((t0 + t1) / 2))
 
             var fractions: [ActivityKind: Double] = [:]
@@ -524,5 +561,49 @@ struct DailyRingDensity {
             total += smoothedDensity[i] * DailyRingLayout.dotCapacityPerSlice(outerRadius: radii[i]) * max(0, t1 - t0) / DailyRingLayout.sliceHours
         }
         return total
+    }
+}
+
+/// 1日ぶんの5分スライスごとの集計。端末内に保存する単位（DailyHistoryStore）で、集計（週・月）の元にもなる。
+struct DailyRingSlices: Codable, Equatable {
+    /// "yyyy-MM-dd"
+    var dateKey: String
+    /// 描いた範囲（時間）。今日の途中で保存したものは24未満。
+    var drawnHours: Double
+    /// 活動の種類（rawValue）→ 5分スライスごとの秒数（0〜300）。
+    var sliceSeconds: [String: [Int]]
+    /// 1時間ごとの歩数（24要素）。
+    var hourlySteps: [Int]
+    var savedAt: Date
+
+    var sliceCount: Int { sliceSeconds.values.first?.count ?? 0 }
+    var totalSteps: Int { hourlySteps.reduce(0, +) }
+    var isComplete: Bool { drawnHours >= DailyRingLayout.hoursPerDay - 0.01 }
+
+    func seconds(_ kind: ActivityKind, slice i: Int) -> Int {
+        guard let values = sliceSeconds[kind.rawValue], i >= 0, i < values.count else { return 0 }
+        return values[i]
+    }
+
+    /// 種類ごとの合計分数。
+    func minutes(_ kind: ActivityKind) -> Double {
+        Double(sliceSeconds[kind.rawValue]?.reduce(0, +) ?? 0) / 60
+    }
+
+    /// 何かのデータがあるか（空の日の保存を避けるため）。
+    var hasAnyData: Bool {
+        totalSteps > 0 || sliceSeconds.values.contains { $0.contains { $0 > 0 } }
+    }
+
+    /// 中身を表す簡単な署名（サムネイルのキャッシュを、内容が変わったときだけ作り直すため）。
+    var signature: String {
+        var total = 0
+        for values in sliceSeconds.values { total += values.reduce(0, +) }
+        return "\(Int(drawnHours * 10))-\(total)-\(totalSteps)"
+    }
+
+    static func dateKey(for date: Date, calendar: Calendar = .current) -> String {
+        let c = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 }
