@@ -184,12 +184,14 @@ struct DailyRingPanel: View {
             Text("この輪の読み方")
                 .font(.subheadline.bold())
             legendLine(icon: "clock", text: "ぐるっと一周が24時間です。真上が0時、右が6時、真下が12時、左が18時。今日は現在時刻までを描き、これからの時間は空のまま残ります（点線が今の時刻）。")
-            legendLine(icon: "circle.dotted", text: "輪は活動の種類ごとに決まっています。その時刻にその活動をしていた時間が長いほど、輪の上の点が多く、びっしり並びます。歩行・走行は歩数が多いほど濃くなります。")
+            legendLine(icon: "arrow.up.left.and.arrow.down.right", text: "中心から外へ行くほど、その時刻の活動が活発だったことを表します（歩数が多いほど遠くまで広がり、静かな時間は中心の近くにとどまります）。うっすらした点線の円は、内側から弱・中・強の目安です。")
+            legendLine(icon: "circle.dotted", text: "点の詰まりは、その時刻にその状態だった時間の長さです。歩行・走行は歩数が多いほど濃くなります。")
+            legendLine(icon: "paintpalette", text: "色は活動の種類です。切り替わりの前後20分ほどは、色がなめらかに混ざります。")
 
-            Text("外側の輪から順に")
+            Text("色 = 活動の種類")
                 .font(.footnote.bold())
                 .padding(.top, 4)
-            ForEach(DailyRingLayout.ringOrder, id: \.self) { kind in
+            ForEach(DailyRingLayout.kindOrder, id: \.self) { kind in
                 let c = DailyRingLayout.ringColor(for: kind)
                 HStack(spacing: 8) {
                     Circle()
@@ -200,7 +202,7 @@ struct DailyRingPanel: View {
                         .font(.footnote)
                 }
             }
-            Text("静止（睡眠など長い時間）は一番外側の広い輪に背景のように広がります。点の数は5分ごとに数え、前後20分でなめらかにつないでいます。")
+            Text("自転車は1分90歩、車移動は1分30歩の歩数に換算して強さを決めています。静止は睡眠など長い時間でも、中心近くの小さな円になります。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
