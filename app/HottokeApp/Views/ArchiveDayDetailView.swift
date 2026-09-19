@@ -2,12 +2,14 @@ import SwiftUI
 
 /// アーカイブのカレンダーで日付をタップしたときに表示するシート。
 /// その日の「1日の輪」（点描リング）を、今日タブと同じレンダラーで描いて表示する（24時間すべて）。
-/// 端末に活動履歴が残っていない日は「データなし」を表示する。
+/// 端末に活動履歴が残っていない日は、保存済みの要約から描き、それもなければ「データなし」を表示する。
 /// （以前の動画版は廃止。ArchivePatternStore・動画書き出しのコードは復活用に残してあるが、この画面は使わない）
 struct ArchiveDayDetailView: View {
     let date: Date
     @StateObject private var store: DailyRingStore
     @Environment(\.dismiss) private var dismiss
+    @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
+    @AppStorage(RingTheme.storageKey) private var themeRaw = RingTheme.standard.rawValue
 
     init(date: Date) {
         self.date = date
@@ -16,7 +18,7 @@ struct ArchiveDayDetailView: View {
 
     var body: some View {
         NavigationStack {
-            DailyRingPanel(store: store)
+            DailyRingPanel(store: store, proEnabled: proEnabled)
                 .navigationTitle(dateTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -25,6 +27,7 @@ struct ArchiveDayDetailView: View {
                     }
                 }
                 .task {
+                    store.configure(proEnabled: proEnabled, themeRaw: themeRaw)
                     await store.refresh()
                 }
         }

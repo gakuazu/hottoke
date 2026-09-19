@@ -5,12 +5,35 @@ import CoreMotion
 /// v1では権限状態の確認とプライバシー表示に絞る。課金の実装はv2（Apple Developer Program登録後）。
 struct SettingsView: View {
     @State private var motionStatusText: String = "未確認"
+    @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
+    @AppStorage(RingTheme.storageKey) private var themeRaw = RingTheme.standard.rawValue
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("権限") {
                     LabeledContent("モーション & フィットネス", value: motionStatusText)
+                }
+                Section("プロモード") {
+                    Toggle("プロモード", isOn: $proEnabled)
+                    Text("このビルド（家族用）では、既定でオンです。オフにすると、下の機能がロック表示になります。課金の仕組みはまだありません（将来、購入で切り替えられるように作ってあります）。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ForEach(ProFeature.allCases) { feature in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label(feature.displayName, systemImage: proEnabled ? "checkmark.circle" : "lock")
+                                .font(.subheadline)
+                            Text(feature.summary)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Picker("配色テーマ", selection: $themeRaw) {
+                        ForEach(RingTheme.allCases) { theme in
+                            Text(theme.displayName).tag(theme.rawValue)
+                        }
+                    }
+                    .disabled(!proEnabled)
                 }
                 Section("「1日の輪」について") {
                     Text("「乗り物」は電車・バス・車です。iPhoneの動き検出（CoreMotion）は電車と車を区別できないため、まとめて表示します。")

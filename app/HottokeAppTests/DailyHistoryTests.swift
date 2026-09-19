@@ -49,7 +49,7 @@ final class DailyHistoryTests: XCTestCase {
         let s = slices(day: 19, now: date(19, 14, 20))
         XCTAssertFalse(s.isComplete)
         XCTAssertEqual(s.drawnHours, 14 + 20.0 / 60, accuracy: 1e-9)
-        XCTAssertEqual(s.sliceCount, Int(ceil((14 + 20.0 / 60) * 12)))
+        XCTAssertEqual(s.sliceCount, 172) // 14時間20分 = 5分 x 172
     }
 
     func testSaveAndLoadRoundTrip() throws {

@@ -442,11 +442,98 @@ final class DailyRingLayoutTests: XCTestCase {
         ]))
         try write("ring-driver-day.png", data: driver, day: 14)
 
+        // ---- プロモード用のサンプル ----
+        let base = calendar.startOfDay(for: now)
+        // 直近30日ぶんの、少しずつ違う1日（平日/休日・ランニングの日・乗り物の日が混ざる）
+        var pastRecords: [DailyRingSlices] = []
+        for k in stride(from: 29, through: 1, by: -1) {
+            let day = calendar.date(byAdding: .day, value: -k, to: base)!
+            pastRecords.append(syntheticDay(day: day, index: k))
+        }
+        let todayRecord = DailyRingLayout.makeSlices(data: typicalDay(day: 19), now: now, calendar: calendar)
+        let weekRecords = Array(pastRecords.suffix(6)) + [todayRecord]
+        let monthRecords = pastRecords + [todayRecord]
+
+        func writePNG(_ image: UIImage, _ name: String) throws {
+            try image.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
+        }
+
+        // 積算（1週間・1ヶ月）
+        for (name, records, title) in [("ring-week-aggregate.png", weekRecords, "1週間の積算"), ("ring-month-aggregate.png", monthRecords, "1ヶ月の積算")] {
+            var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+            options.caption = RingCaption(title: title, subtitle: "保存済み \(records.count)日分")
+            try writePNG(DailyRingRenderer.render(density: DailyRingLayout.aggregate(records), date: base, options: options, calendar: calendar), name)
+        }
+
+        // 今日と普段の重ね
+        var compareOptions = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+        compareOptions.ghost = DailyRingLayout.aggregate(pastRecords)
+        let todayDensity = DailyRingLayout.makeDensity(slices: todayRecord)
+        try writePNG(DailyRingRenderer.render(density: todayDensity, date: base, options: compareOptions, calendar: calendar), "ring-compare-today.png")
+
+        // 振り返りレポート（1週間・1ヶ月）
+        for (name, records, period) in [("report-week.png", weekRecords, RingPeriod.week), ("report-month.png", monthRecords, RingPeriod.month)] {
+            let report = PeriodReport.make(records: records, period: period, now: now, calendar: calendar)
+            try writePNG(ReportRenderer.render(report: report, records: records, theme: .standard), name)
+        }
+        let weekReport = PeriodReport.make(records: weekRecords, period: .week, now: now, calendar: calendar)
+        try writePNG(ReportRenderer.render(report: weekReport, records: weekRecords, theme: .aurora), "report-week-aurora.png")
+
+        // 壁紙サイズ（iPhoneの画面の比率）
+        var wallpaper = RingRenderOptions(canvas: CGSize(width: 1179, height: 2556))
+        wallpaper.chrome = .art
+        wallpaper.ringCenter = CGPoint(x: 1179 / 2, y: 2556 * 0.54)
+        try writePNG(DailyRingRenderer.render(density: DailyRingLayout.aggregate(weekRecords), date: base, options: wallpaper, calendar: calendar), "ring-wallpaper-week.png")
+
+        // 各配色テーマ（普通の日）
+        for theme in RingTheme.allCases {
+            var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+            options.theme = theme
+            let density = DailyRingLayout.makeDensity(slices: DailyRingLayout.makeSlices(data: typicalDay(day: 18), now: now, calendar: calendar))
+            try writePNG(DailyRingRenderer.render(density: density, date: date(2026, 9, 18), options: options, calendar: calendar), "ring-theme-\(theme.rawValue).png")
+        }
+
+        // アーカイブのサムネイル（拡大して確認）
+        let thumbs = pastRecords.suffix(3).map { DailyRingRenderer.renderThumbnail(slices: $0, size: 240) }
+        for (i, t) in thumbs.enumerated() { try writePNG(t, "thumb-\(i).png") }
+
         // 自転車も走行も車も混ざった日
         let mixed = makeData(day: date(2026, 9, 13), hourlySteps: steps([7: 1500, 12: 2000, 18: 5200]), segments: segments(day: 13, [
             (0, 0, 7, 0, .stationary), (7, 0, 7, 40, .cycling), (7, 40, 12, 0, .stationary), (12, 0, 12, 30, .walking), (12, 30, 17, 30, .stationary),
             (17, 30, 18, 0, .automotive), (18, 0, 18, 50, .running), (18, 50, 24, 0, .stationary)
         ]))
         try write("ring-mixed-day.png", data: mixed, day: 13)
+    }
+
+    /// サンプル用: 日ごとに少しずつ違う1日（起床時刻・通勤の乗り物・ランニングの日など）を作る。
+    private func syntheticDay(day: Date, index i: Int) -> DailyRingSlices {
+        let start = calendar.startOfDay(for: day)
+        let weekend = i % 7 == 0 || i % 7 == 6
+        let wake = 6 * 60 + (i * 7) % 50 + (weekend ? 60 : 0)
+        var blocks: [(Int, Int, ActivityKind)] = [(0, wake, .sleeping)]
+        var cursor = wake
+        func add(_ length: Int, _ kind: ActivityKind) { blocks.append((cursor, cursor + length, kind)); cursor += length }
+        if weekend {
+            add(90, .stationary); add(45 + i % 30, .walking); add(150, .stationary)
+            if i % 2 == 0 { add(50, .cycling) } else { add(35, .walking) }
+            add(max(30, 15 * 60 - cursor), .stationary) // 午後まで静止
+        } else {
+            add(50, .stationary); add(25 + i % 10, .walking)
+            if i % 3 == 0 { add(40, .automotive) } else { add(30, .walking) }
+            add(12 * 60 + 10 - cursor, .stationary); add(25, .walking)
+            add(17 * 60 + 20 - cursor, .stationary)
+            if i % 4 == 1 { add(40, .running); add(20, .walking) } else { add(30, .walking); add(30 + (i * 5) % 30, .automotive) }
+        }
+        let sleepStart = 23 * 60 + (i * 3) % 40
+        if sleepStart > cursor { blocks.append((cursor, sleepStart, .stationary)); blocks.append((sleepStart, 24 * 60, .sleeping)) }
+        var segments: [ActivitySegment] = []
+        var hourly = [Int](repeating: 0, count: 24)
+        for (a, b, kind) in blocks where b > a {
+            segments.append(ActivitySegment(start: start.addingTimeInterval(Double(a) * 60), end: start.addingTimeInterval(Double(min(b, 1440)) * 60), kind: kind))
+            let rate = kind == .walking ? 92 : (kind == .running ? 165 : 0)
+            for minute in a..<min(b, 1440) { hourly[min(23, minute / 60)] += rate }
+        }
+        let data = DailyActivityData(date: start, segments: segments, stepCount: hourly.reduce(0, +), distanceMeters: 0, floorsAscended: 0, floorAscendTimes: [], hourlySteps: hourly)
+        return DailyRingLayout.makeSlices(data: data, now: start.addingTimeInterval(36 * 3600), calendar: calendar)
     }
 }

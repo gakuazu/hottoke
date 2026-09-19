@@ -2,8 +2,9 @@ import SwiftUI
 
 /// 「1日の輪」（点描リング）の画像を作って持っておく。
 /// ・`date`がnil = 今日。開いたとき／前面に戻したとき／更新ボタンで最新の活動データを取り直して描き直す。
-/// ・`date`が過去日 = アーカイブ。その日の24時間ぶんを描く。端末の活動履歴の保持期間（直近約7日）を
-///   過ぎている日は取得せず「データなし」を示す。
+///   プロモードでは、期間（今日／1週間／1ヶ月）の切り替えと、普段との比較もできる。
+/// ・`date`が過去日 = アーカイブ。その日の24時間ぶんを描く。端末の履歴が残っていない古い日は、
+///   保存済みの要約（DailyHistoryStore）から描き、それもなければ「データなし」を示す。
 @MainActor
 final class DailyRingStore: ObservableObject {
     @Published private(set) var image: UIImage?
@@ -12,15 +13,83 @@ final class DailyRingStore: ObservableObject {
     @Published private(set) var stepCount: Int = 0
     /// 画像を作れない理由（過去日で端末にデータが残っていない等）。nilなら画像あり（または準備中）。
     @Published private(set) var noDataMessage: String?
+    /// プロ機能がロックされているときの案内など、一時的なお知らせ。
+    @Published private(set) var notice: String?
+    /// 積算・比較の状況の説明（保存済み◯日分の平均など）。
+    @Published private(set) var summaryNote: String?
+    @Published private(set) var period: RingPeriod = .today
+    @Published private(set) var compare = false
 
     let date: Date?
     var isToday: Bool { date == nil }
 
+    private(set) var proEnabled = ProAccess.defaultEnabled
+    private(set) var themeRaw = RingTheme.standard.rawValue
+    var theme: RingTheme { RingTheme.effective(rawValue: themeRaw, proEnabled: proEnabled) }
+
     private let service = ActivityDataService()
+    private var baseSlices: DailyRingSlices?
+    private var built: Built?
+    private var generation = 0
+
+    /// 直近に描いた内容（別のサイズで書き出し直すために持っておく）。
+    private struct Built {
+        var density: DailyRingDensity
+        var date: Date
+        var caption: RingCaption?
+        var ghost: DailyRingDensity?
+    }
 
     init(date: Date? = nil) {
         self.date = date
     }
+
+    /// 端末の画面のピクセル数（壁紙サイズの書き出しに使う）。
+    static var screenPixels: CGSize {
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        let b = scene?.screen.nativeBounds ?? CGRect(x: 0, y: 0, width: 1179, height: 2556)
+        return CGSize(width: b.width, height: b.height)
+    }
+
+    // MARK: - 設定の反映
+
+    /// プロモードのオン・オフと配色テーマの設定を反映する。変わったら描き直す。
+    func configure(proEnabled: Bool, themeRaw: String) {
+        let changed = proEnabled != self.proEnabled || themeRaw != self.themeRaw
+        self.proEnabled = proEnabled
+        self.themeRaw = themeRaw
+        if !ProAccess.isUnlocked(.aggregation, enabled: proEnabled) && period != .today { period = .today }
+        if !ProAccess.isUnlocked(.comparison, enabled: proEnabled) && compare { compare = false }
+        if changed && baseSlices != nil { Task { await rebuild() } }
+    }
+
+    func showLocked(_ feature: ProFeature) {
+        notice = ProAccess.lockedMessage(for: feature)
+    }
+
+    func selectPeriod(_ newPeriod: RingPeriod) {
+        guard isToday, newPeriod != period else { return }
+        if newPeriod != .today && !ProAccess.isUnlocked(.aggregation, enabled: proEnabled) {
+            showLocked(.aggregation)
+            return
+        }
+        notice = nil
+        period = newPeriod
+        Task { await rebuild() }
+    }
+
+    func setCompare(_ on: Bool) {
+        guard isToday else { return }
+        if on && !ProAccess.isUnlocked(.comparison, enabled: proEnabled) {
+            showLocked(.comparison)
+            return
+        }
+        notice = nil
+        compare = on
+        Task { await rebuild() }
+    }
+
+    // MARK: - 取得と描画
 
     /// 最新データを取得して描き直す。すでに取得中なら何もしない。
     /// ・取得した日ごとの要約は、端末内の履歴（DailyHistoryStore）に保存する。
@@ -53,6 +122,7 @@ final class DailyRingStore: ObservableObject {
         }
 
         guard let slices else {
+            baseSlices = nil
             image = nil
             stepCount = 0
             lastUpdated = now
@@ -62,35 +132,129 @@ final class DailyRingStore: ObservableObject {
             return
         }
 
-        let day = calendar.startOfDay(for: target)
-        let rendered = await Task.detached(priority: .userInitiated) { () -> UIImage in
-            let density = DailyRingLayout.makeDensity(slices: slices)
-            return DailyRingRenderer.render(density: density, date: day)
-        }.value
-
-        image = rendered
-        stepCount = slices.totalSteps
+        baseSlices = slices
         lastUpdated = now
+        await rebuild()
 
         // 今日を開いたときは、ついでに直近の他の日も取り直して保存する（アーカイブ・積算のため）。
         if isToday {
             let service = self.service
             Task { @MainActor in
                 await history.syncRecentDays(service: service, includeToday: false)
+                if self.period != .today || self.compare { await self.rebuild() }
             }
         }
     }
+
+    /// 取得済みのデータから、いまの設定（期間・比較・テーマ）で描き直す。
+    func rebuild() async {
+        guard let slices = baseSlices else { return }
+        generation += 1
+        let gen = generation
+        let now = Date()
+        let calendar = Calendar.current
+        let history = DailyHistoryStore.shared
+        let period = self.period
+        let compareOn = compare && isToday
+        let day = calendar.startOfDay(for: date ?? now)
+        var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+        options.theme = theme
+
+        var records: [DailyRingSlices] = []
+        var ghostRecords: [DailyRingSlices] = []
+        var caption: RingCaption?
+        var note: String?
+        var steps = slices.totalSteps
+        var renderDate = day
+
+        if period == .today {
+            if compareOn {
+                ghostRecords = history.recentRecords(days: 30, endingAt: now, calendar: calendar)
+                    .filter { $0.dateKey != slices.dateKey && $0.isComplete }
+                note = ghostRecords.isEmpty
+                    ? "普段（過去の日の平均）を作るデータが、まだ保存されていません。"
+                    : "淡い点は「普段」（保存済みの過去\(ghostRecords.count)日の平均）です。"
+            }
+        } else {
+            // 期間の積算: 今日の最新の記録を差し替えて、直近の期間の記録を集める。
+            records = history.recentRecords(days: period.days, endingAt: now, calendar: calendar).filter { $0.dateKey != slices.dateKey }
+            records.append(slices)
+            records.sort { $0.dateKey < $1.dateKey }
+            steps = records.reduce(0) { $0 + $1.totalSteps }
+            renderDate = calendar.date(byAdding: .day, value: -(period.days - 1), to: day) ?? day
+            caption = RingCaption(title: "\(period.displayName)の積算", subtitle: "保存済み \(records.count)日分")
+            note = records.count < period.days
+                ? "保存済み\(records.count)日分の平均です（\(period.days)日のうち。保存を始めた日から貯まります）。"
+                : "保存済み\(records.count)日分の平均です。"
+        }
+
+        let renderRecords = records
+        let renderGhost = ghostRecords
+        let renderCaption = caption
+        let renderDay = renderDate
+        let baseOptions = options
+        let result = await Task.detached(priority: .userInitiated) { () -> (UIImage, Built) in
+            let density: DailyRingDensity
+            if period == .today {
+                density = DailyRingLayout.makeDensity(slices: slices)
+            } else {
+                density = DailyRingLayout.aggregate(renderRecords)
+            }
+            let ghost: DailyRingDensity? = renderGhost.isEmpty ? nil : DailyRingLayout.aggregate(renderGhost)
+            var renderOptions = baseOptions
+            renderOptions.ghost = ghost
+            renderOptions.caption = renderCaption
+            let image = DailyRingRenderer.render(density: density, date: renderDay, options: renderOptions)
+            return (image, Built(density: density, date: renderDay, caption: renderCaption, ghost: ghost))
+        }.value
+
+        guard gen == generation else { return }
+        image = result.0
+        built = result.1
+        stepCount = steps
+        summaryNote = note
+    }
+
+    // MARK: - 書き出し
+
+    /// いま表示している内容を、指定のサイズで描き直して返す（標準・高解像度・壁紙）。
+    func exportImage(size: RingExportSize) async -> UIImage? {
+        guard let built else { return nil }
+        let canvas = size.canvas(screenPixels: Self.screenPixels)
+        var options = RingRenderOptions(canvas: canvas)
+        options.theme = theme
+        options.ghost = built.ghost
+        if size == .wallpaper {
+            options.chrome = .art
+            options.ringCenter = CGPoint(x: canvas.width / 2, y: canvas.height * 0.54)
+        } else {
+            options.caption = built.caption
+        }
+        let density = built.density
+        let day = built.date
+        let renderOptions = options
+        return await Task.detached(priority: .userInitiated) {
+            DailyRingRenderer.render(density: density, date: day, options: renderOptions)
+        }.value
+    }
 }
 
-/// 画像・保存ボタン・更新ボタン・読み方の凡例。「今日」タブとアーカイブの日付シートで共通。
+/// 画像・期間の切り替え・保存ボタン・更新ボタン・読み方の凡例。「今日」タブとアーカイブの日付シートで共通。
 struct DailyRingPanel: View {
     @ObservedObject var store: DailyRingStore
+    let proEnabled: Bool
     @State private var showSavedBanner = false
     @State private var saveErrorMessage: String?
+    @State private var isSaving = false
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                if store.isToday {
+                    periodPicker
+                        .padding(.horizontal, 16)
+                }
+
                 ringArea
                     .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
@@ -98,15 +262,46 @@ struct DailyRingPanel: View {
 
                 statusLine
 
+                if let note = store.summaryNote {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+                if let notice = store.notice {
+                    Text(notice)
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 24)
+                }
+
+                if store.isToday && store.period == .today {
+                    let comparisonUnlocked = ProAccess.isUnlocked(.comparison, enabled: proEnabled)
+                    Toggle(isOn: Binding(get: { store.compare }, set: { store.setCompare($0) })) {
+                        Label(comparisonUnlocked ? "普段と比べる" : "普段と比べる（プロ機能）",
+                              systemImage: comparisonUnlocked ? "square.on.square" : "lock")
+                    }
+                    .padding(.horizontal, 20)
+                }
+
                 VStack(spacing: 12) {
-                    Button {
-                        Task { await save() }
+                    Menu {
+                        ForEach(RingExportSize.allCases) { size in
+                            let locked = size.requiresPro && !ProAccess.isUnlocked(.highQualityExport, enabled: proEnabled)
+                            Button {
+                                Task { await save(size) }
+                            } label: {
+                                Label(locked ? "\(size.displayName)（プロ機能）" : size.displayName, systemImage: locked ? "lock" : "square.and.arrow.down")
+                            }
+                        }
                     } label: {
                         Label("カメラロールに保存", systemImage: "square.and.arrow.down")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(store.image == nil || store.isLoading)
+                    .disabled(store.image == nil || store.isLoading || isSaving)
 
                     Button {
                         Task { await store.refresh() }
@@ -135,6 +330,16 @@ struct DailyRingPanel: View {
             }
             .padding(.vertical, 16)
         }
+    }
+
+    private var periodPicker: some View {
+        Picker("期間", selection: Binding(get: { store.period }, set: { store.selectPeriod($0) })) {
+            ForEach(RingPeriod.allCases) { period in
+                let locked = period != .today && !ProAccess.isUnlocked(.aggregation, enabled: proEnabled)
+                Text(locked ? "\(period.displayName) 🔒" : period.displayName).tag(period)
+            }
+        }
+        .pickerStyle(.segmented)
     }
 
     @ViewBuilder
@@ -182,7 +387,7 @@ struct DailyRingPanel: View {
     private var statusLine: some View {
         if let updated = store.lastUpdated, store.image != nil {
             VStack(spacing: 2) {
-                Text("\(store.isToday ? "今日" : "この日")の歩数: \(store.stepCount)歩")
+                Text("\(store.isToday ? store.period.displayName : "この日")の歩数: \(store.stepCount)歩")
                     .font(.headline)
                 if store.isToday {
                     Text("\(Self.timeFormatter.string(from: updated)) 時点のデータ")
@@ -207,14 +412,14 @@ struct DailyRingPanel: View {
                 .font(.subheadline.bold())
             legendLine(icon: "clock", text: "ぐるっと一周が24時間です。真上が0時、右が6時、真下が12時、左が18時。今日は現在時刻までを描き、これからの時間は空のまま残ります（点線が今の時刻）。")
             legendLine(icon: "arrow.up.left.and.arrow.down.right", text: "中心から外へ行くほど、その時刻の活動が活発だったことを表します（歩数が多いほど遠くまで広がり、静かな時間は中心の近くにとどまります）。うっすらした点線の円は、内側から弱・中・強の目安です。")
-            legendLine(icon: "circle.dotted", text: "点の詰まりは、その時刻にその状態だった時間の長さです。歩行・走行は歩数が多いほど濃くなります。")
-            legendLine(icon: "paintpalette", text: "色は活動の種類です。切り替わりの前後20分ほどは、色がなめらかに混ざります。")
+            legendLine(icon: "circle.dotted", text: "点の詰まりは、その時刻にその状態だった時間の長さです。歩行・ランニングは歩数が多いほど濃くなります。")
+            legendLine(icon: "paintpalette", text: "色は活動の種類です。切り替わりの前後20分ほどは、色がなめらかに混ざります。1週間・1ヶ月の積算では、その時刻に各活動をしていた日の割合で色が混ざります。")
 
             Text("色 = 活動の種類")
                 .font(.footnote.bold())
                 .padding(.top, 4)
             ForEach(DailyRingLayout.kindOrder, id: \.self) { kind in
-                let c = DailyRingLayout.ringColor(for: kind)
+                let c = store.theme.color(for: kind)
                 HStack(spacing: 8) {
                     Circle()
                         .fill(Color(red: c.r, green: c.g, blue: c.b))
@@ -244,8 +449,14 @@ struct DailyRingPanel: View {
         }
     }
 
-    private func save() async {
-        guard let image = store.image else { return }
+    private func save(_ size: RingExportSize) async {
+        if size.requiresPro && !ProAccess.isUnlocked(.highQualityExport, enabled: proEnabled) {
+            saveErrorMessage = ProAccess.lockedMessage(for: .highQualityExport)
+            return
+        }
+        isSaving = true
+        defer { isSaving = false }
+        guard let image = await store.exportImage(size: size) else { return }
         do {
             try await PhotoLibrarySaver.saveImage(image)
             saveErrorMessage = nil
@@ -263,13 +474,26 @@ struct DailyRingPanel: View {
 struct DailyRingView: View {
     @StateObject private var store = DailyRingStore()
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
+    @AppStorage(RingTheme.storageKey) private var themeRaw = RingTheme.standard.rawValue
+    @State private var showReport = false
 
     var body: some View {
         NavigationStack {
-            DailyRingPanel(store: store)
+            DailyRingPanel(store: store, proEnabled: proEnabled)
                 .navigationTitle("今日")
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        themeMenu
+                        Button {
+                            if ProAccess.isUnlocked(.report, enabled: proEnabled) {
+                                showReport = true
+                            } else {
+                                store.showLocked(.report)
+                            }
+                        } label: {
+                            Image(systemName: "doc.richtext")
+                        }
                         Button {
                             Task { await store.refresh() }
                         } label: {
@@ -279,12 +503,37 @@ struct DailyRingView: View {
                     }
                 }
                 .task {
+                    store.configure(proEnabled: proEnabled, themeRaw: themeRaw)
                     await store.refresh()
                 }
+                .onChange(of: proEnabled) { _, _ in store.configure(proEnabled: proEnabled, themeRaw: themeRaw) }
+                .onChange(of: themeRaw) { _, _ in store.configure(proEnabled: proEnabled, themeRaw: themeRaw) }
                 .onChange(of: scenePhase) { _, newPhase in
                     guard newPhase == .active else { return }
                     Task { await store.refresh() }
                 }
+                .sheet(isPresented: $showReport) {
+                    ReportView(proEnabled: proEnabled, theme: store.theme)
+                }
+        }
+    }
+
+    /// 配色テーマの切り替え（プロ機能）。
+    private var themeMenu: some View {
+        Menu {
+            ForEach(RingTheme.allCases) { theme in
+                Button {
+                    if ProAccess.isUnlocked(.colorThemes, enabled: proEnabled) {
+                        themeRaw = theme.rawValue
+                    } else {
+                        store.showLocked(.colorThemes)
+                    }
+                } label: {
+                    Label(theme.displayName, systemImage: theme == store.theme ? "checkmark" : "paintpalette")
+                }
+            }
+        } label: {
+            Image(systemName: "paintpalette")
         }
     }
 }

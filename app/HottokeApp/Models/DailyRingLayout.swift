@@ -420,6 +420,47 @@ enum DailyRingLayout {
         )
     }
 
+    // MARK: - 積算（複数日を1枚の輪に重ねる）
+
+    /// 複数日の記録を平均して、期間の積算の輪にする。
+    /// ・周方向 = 時刻（24時間）。日ごとの5分スライスを、同じ時刻どうしで平均する。
+    /// ・半径 = その時刻の強さの平均（日ごとの強さ、活動していない日は0として平均）。よく動く時刻ほど外へ広がる。
+    /// ・点の濃さ = その時刻に何かしらの記録があった日の割合（に、歩数による濃さ）。
+    /// ・色 = その時刻にその活動をしていた日の割合（例: 7日中5日が睡眠なら、その時刻は睡眠の色が多く混ざる）。
+    /// 今日の途中の記録が含まれるときは、その時刻より先は、記録がある日だけで平均する。
+    /// 最終的に前後20分でなめらかにし、24時間ぶんそろっていれば0時と24時をつなぐ。
+    static func aggregate(_ records: [DailyRingSlices]) -> DailyRingDensity {
+        let densities = records.map { makeDensity(slices: $0) }
+        let sliceCount = densities.map { $0.sliceCount }.max() ?? 0
+        var intensity = [Double](repeating: 0, count: sliceCount)
+        var density = [Double](repeating: 0, count: sliceCount)
+        var weights: [ActivityKind: [Double]] = [:]
+        for kind in kindOrder { weights[kind] = [Double](repeating: 0, count: sliceCount) }
+
+        for i in 0..<sliceCount {
+            let present = densities.filter { $0.sliceCount > i }
+            guard !present.isEmpty else { continue }
+            let n = Double(present.count)
+            for d in present {
+                intensity[i] += d.rawIntensity[i] / n
+                density[i] += d.rawDensity[i] / n
+                for kind in kindOrder { weights[kind]?[i] += (d.rawWeights[kind]?[i] ?? 0) / n }
+            }
+        }
+
+        let periodic = sliceCount == slicesPerDay
+        var smoothedWeights: [ActivityKind: [Double]] = [:]
+        for kind in kindOrder { smoothedWeights[kind] = smooth(weights[kind] ?? [], periodic: periodic) }
+        let smoothedIntensity = smooth(intensity, periodic: periodic)
+        let drawn = densities.map { $0.drawnHours }.max() ?? 0
+        return DailyRingDensity(
+            drawnHours: periodic ? hoursPerDay : drawn, sliceCount: sliceCount,
+            rawIntensity: intensity, rawDensity: density, rawWeights: weights,
+            smoothedIntensity: smoothedIntensity, smoothedDensity: smooth(density, periodic: periodic), smoothedWeights: smoothedWeights,
+            smoothedRadius: smoothedIntensity.map { radiusFraction(forIntensity: $0) }
+        )
+    }
+
     // MARK: - 点の配置
 
     /// 点の配置を作る。同じ密度・同じseedなら毎回まったく同じ配置になる。
