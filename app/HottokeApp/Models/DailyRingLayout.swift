@@ -63,10 +63,12 @@ enum DailyRingLayout {
     static let packingFill: Double = 0.85
 
     /// 活動の種類（凡例・色の割り当ての順序）。
-    static let kindOrder: [ActivityKind] = [.stationary, .walking, .running, .cycling, .automotive]
+    static let kindOrder: [ActivityKind] = [.stationary, .sleeping, .walking, .running, .cycling, .automotive]
 
-    /// 中心の空洞の半径（最大半径を1とした割合）。点はこの外側から始まる。
-    static let cavityRadius: Double = 0.14
+    /// 中心付近の点の密度は、中心（密度0）から外へ向かってなだらかに濃くなる（空洞の縁をくっきりさせない）。
+    /// 半径がこの値のあいだで smoothstep で 0 → 1 に立ち上がる。
+    static let centerFadeStart: Double = 0.02
+    static let centerFadeEnd: Double = 0.34
     /// 強さ0（静止）のときの外側の半径。空洞のすぐ外に薄く見える程度。
     static let minimumOuterRadius: Double = 0.27
     /// 強さ→半径の飽和の速さ（歩/分）。1 - exp(-強さ/70)。20歩/分で約25%、60歩/分で約58%、120歩/分で約82%。
@@ -104,6 +106,7 @@ enum DailyRingLayout {
     static func ringColor(for kind: ActivityKind) -> RingRGB {
         switch ringKind(for: kind) {
         case .stationary: return rgb(hex: "#5b79ff") // 青
+        case .sleeping: return rgb(hex: "#4a3fd6")   // 深い藍
         case .automotive: return rgb(hex: "#d27cff") // 紫
         case .cycling: return rgb(hex: "#ffb43e")    // 琥珀
         case .walking: return rgb(hex: "#4fe8b0")    // ミント
@@ -184,12 +187,56 @@ enum DailyRingLayout {
         return minimumOuterRadius + (1 - minimumOuterRadius) * (1 - exp(-s / intensityScale))
     }
 
-    /// 半径の割合の範囲内の面積を埋めるのに必要な点の数（密度1のとき、1スライスあたり）。
+    // MARK: - 中心の密度勾配
+
+    /// 中心からの距離r（最大半径=1）での点の密度（0...1）。中心で0、外へ向かってなだらかに1へ。
+    static func centerDensity(atRadius r: Double) -> Double {
+        let t = min(1, max(0, (r - centerFadeStart) / (centerFadeEnd - centerFadeStart)))
+        return t * t * (3 - 2 * t)
+    }
+
+    /// 密度を掛けた面積の積分 ∫0^r 密度(x)·x dx の表（rは0〜1を1024分割）。
+    private static let radialMassTable: [Double] = {
+        let n = 1024
+        var table = [Double](repeating: 0, count: n + 1)
+        for i in 1...n {
+            let x0 = Double(i - 1) / Double(n), x1 = Double(i) / Double(n)
+            let f0 = DailyRingLayout.centerDensity(atRadius: x0) * x0
+            let f1 = DailyRingLayout.centerDensity(atRadius: x1) * x1
+            table[i] = table[i - 1] + 0.5 * (f0 + f1) * (x1 - x0)
+        }
+        return table
+    }()
+
+    /// 半径r以内の「密度を掛けた面積」（密度が一様なら r²/2）。
+    static func radialMass(upTo r: Double) -> Double {
+        let table = radialMassTable
+        let n = table.count - 1
+        let x = min(1, max(0, r)) * Double(n)
+        let i = min(n - 1, Int(x))
+        return table[i] + (table[i + 1] - table[i]) * (x - Double(i))
+    }
+
+    /// radialMassがmになる半径（逆関数）。点の半径を、密度勾配に従って決めるのに使う。
+    static func radiusForMass(_ m: Double) -> Double {
+        let table = radialMassTable
+        let n = table.count - 1
+        let target = min(max(0, m), table[n])
+        var lo = 0, hi = n
+        while hi - lo > 1 {
+            let mid = (lo + hi) / 2
+            if table[mid] <= target { lo = mid } else { hi = mid }
+        }
+        let span = table[hi] - table[lo]
+        let frac = span > 0 ? (target - table[lo]) / span : 0
+        return (Double(lo) + frac) / Double(n)
+    }
+
+    /// 外側の半径までを密度勾配つきで埋めるのに必要な点の数（密度1のとき、1スライスあたり）。
     static func dotCapacityPerSlice(outerRadius: Double) -> Double {
         let sliceAngle = 2 * Double.pi * sliceHours / hoursPerDay
-        let area = 0.5 * max(0, outerRadius * outerRadius - cavityRadius * cavityRadius) * sliceAngle
         let dotArea = Double.pi * dotRadiusFraction * dotRadiusFraction
-        return packingFill * area / dotArea
+        return packingFill * radialMass(upTo: outerRadius) * sliceAngle / dotArea
     }
 
     // MARK: - 集計（時間スライスごと）
@@ -348,7 +395,6 @@ enum DailyRingLayout {
     static func makeDots(density: DailyRingDensity, seed: UInt64) -> [RingDot] {
         var generator = SeededGenerator(seed: seed &* 0x9E3779B97F4A7C15 &+ 0x1234567)
         var dots: [RingDot] = []
-        let cavitySq = cavityRadius * cavityRadius
 
         func rand() -> Double { Double.random(in: 0..<1, using: &generator) }
 
@@ -377,10 +423,8 @@ enum DailyRingLayout {
             for _ in 0..<count {
                 let hour = t0 + rand() * (t1 - t0)
                 let outer = density.outerRadius(at: hour)
-                let outerSq = outer * outer
-                let u = rand()
-                let radius = (cavitySq + (outerSq - cavitySq) * u).squareRoot()
-                let depth = (radius - cavityRadius) / max(0.0001, outer - cavityRadius)
+                let radius = radiusForMass(rand() * radialMass(upTo: outer))
+                let depth = min(1, radius / max(0.0001, outer))
                 // 中心付近は小さく暗め、外縁は大きく明るい。
                 let size = (0.55 + 0.75 * pow(depth, 1.3)) * (0.8 + 0.4 * rand())
                 let brightness = min(1, 0.30 + 0.45 * depth + 0.25 * rand())
@@ -407,9 +451,8 @@ enum DailyRingLayout {
             for _ in 0..<bokehCount {
                 let hour = t0 + rand() * (t1 - t0)
                 let outer = density.outerRadius(at: hour)
-                let u = rand()
-                let radius = (cavitySq + (outer * outer - cavitySq) * u).squareRoot()
-                let depth = (radius - cavityRadius) / max(0.0001, outer - cavityRadius)
+                let radius = radiusForMass(rand() * radialMass(upTo: outer))
+                let depth = min(1, radius / max(0.0001, outer))
                 dots.append(RingDot(hour: hour, radius: radius, kind: pickKind(slice: i), size: 5 + 9 * rand(), brightness: 0.35 + 0.4 * rand(), depth: depth, role: .bokeh))
             }
         }

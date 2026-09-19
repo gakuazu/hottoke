@@ -7,7 +7,7 @@ import CoreGraphics
 ///  ・半径 = その時刻の活動の強さ。中心の小さな空洞から外側の輪郭までを点で埋める。
 ///  ・色 = 活動の種類（境目は割合で混ざる）。点の詰まり = その状態だった頻度。
 ///  ・中心付近は小さく細かい点、外縁ほど大きく明るい点。外縁には光の飛沫、内側には少数の大きな柔らかい光（ボケ）。
-///  ・輪郭には活動の色の細い光の線。暗い背景に加算合成で発光させる。
+///  ・輪郭を白い線で縁取らない。中心は密度がなだらかに濃くなる。暗い背景に加算合成で発光させる。
 /// 座標は画面座標（y下向き）。
 enum DailyRingRenderer {
 
@@ -35,8 +35,6 @@ enum DailyRingRenderer {
             drawGuides(ctx: ctx, center: center, rMax: rMax, side: sideF)
             drawHaze(ctx: ctx, dots: dots, center: center, rMax: rMax)
             drawDots(ctx: ctx, dots: dots, center: center, rMax: rMax)
-            drawOutline(ctx: ctx, density: density, center: center, rMax: rMax)
-            drawCenterGlow(ctx: ctx, center: center, rMax: rMax)
             if density.isPartialDay {
                 drawNowMarker(ctx: ctx, hour: density.drawnHours, center: center, rMax: rMax, side: sideF)
             }
@@ -128,10 +126,7 @@ enum DailyRingRenderer {
         ctx.saveGState()
         ctx.setLineWidth(1)
 
-        // 中心の空洞の縁と、強さの目安の円（弱・中・強）。ごく薄く。
-        let cavity = rMax * CGFloat(DailyRingLayout.cavityRadius)
-        ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.08))
-        ctx.strokeEllipse(in: CGRect(x: center.x - cavity, y: center.y - cavity, width: cavity * 2, height: cavity * 2))
+        // 強さの目安の円（弱・中・強）。ごく薄い点線（中心の縁取りや輪郭の白い線は描かない）。
         ctx.setLineDash(phase: 0, lengths: [2, 6])
         for guide in DailyRingLayout.guideIntensities {
             let r = rMax * CGFloat(DailyRingLayout.radiusFraction(forIntensity: guide.stepsPerMinute))
@@ -169,7 +164,7 @@ enum DailyRingRenderer {
         var gradients: [ActivityKind: CGGradient] = [:]
         for kind in DailyRingLayout.kindOrder {
             let c = DailyRingLayout.ringColor(for: kind)
-            let alpha: CGFloat = kind == .stationary ? 0.07 : 0.13
+            let alpha: CGFloat = (kind == .stationary || kind == .sleeping) ? 0.07 : 0.13
             if let g = gradient(CGFloat(c.r), CGFloat(c.g), CGFloat(c.b), alpha) { gradients[kind] = g }
         }
         var n = 0
@@ -196,7 +191,7 @@ enum DailyRingRenderer {
             // 中心に近いほど濃く深い色、外縁ほど白に近づく（発光の芯）。
             let whiten = 0.04 + 0.34 * pow(dot.depth, 2.4) * dot.brightness
             let c = lighten(base, whiten)
-            let alphaScale: CGFloat = dot.kind == .stationary ? 0.5 : 1.0
+            let alphaScale: CGFloat = (dot.kind == .stationary || dot.kind == .sleeping) ? 0.5 : 1.0
             let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
             let rad = baseRadius * CGFloat(dot.size)
 
@@ -228,56 +223,9 @@ enum DailyRingRenderer {
         ctx.restoreGState()
     }
 
-    // MARK: - 輪郭の光（山の縁）
-
-    private static func drawOutline(ctx: CGContext, density: DailyRingDensity, center: CGPoint, rMax: CGFloat) {
-        let drawn = min(DailyRingLayout.hoursPerDay, density.drawnHours)
-        guard drawn > 0, density.sliceCount > 0 else { return }
-        let steps = max(2, Int(drawn * 24))
-        var points: [CGPoint] = []
-        points.reserveCapacity(steps + 1)
-        for i in 0...steps {
-            let t = drawn * Double(i) / Double(steps)
-            points.append(point(hour: t, radius: rMax * CGFloat(density.outerRadius(at: t)), center: center))
-        }
-
-        ctx.saveGState()
-        ctx.setBlendMode(.plusLighter)
-        ctx.setLineCap(.round)
-        ctx.setLineJoin(.round)
-        let passes: [(width: CGFloat, alpha: CGFloat, whiten: Double)] = [
-            (9, 0.04, 0.0),
-            (3.2, 0.10, 0.10),
-            (1.1, 0.30, 0.30)
-        ]
-        for pass in passes {
-            ctx.setLineWidth(pass.width)
-            for i in 0..<steps {
-                let tMid = drawn * (Double(i) + 0.5) / Double(steps)
-                let slice = min(density.sliceCount - 1, max(0, Int(tMid / DailyRingLayout.sliceHours)))
-                let c = lighten(density.blendedColor(slice: slice), pass.whiten)
-                ctx.setStrokeColor(CGColor(red: c.r, green: c.g, blue: c.b, alpha: pass.alpha))
-                ctx.move(to: points[i])
-                ctx.addLine(to: points[i + 1])
-                ctx.strokePath()
-            }
-        }
-        ctx.restoreGState()
-    }
-
-    private static func drawCenterGlow(ctx: CGContext, center: CGPoint, rMax: CGFloat) {
-        let radius = rMax * CGFloat(DailyRingLayout.cavityRadius) * 1.9
-        ctx.saveGState()
-        ctx.setBlendMode(.plusLighter)
-        if let g = gradient(0.75, 0.82, 1.0, 0.10) {
-            ctx.drawRadialGradient(g, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
-        }
-        ctx.restoreGState()
-    }
-
     /// 現在時刻の位置の目印（細い点線と、外周の小さな点）。
     private static func drawNowMarker(ctx: CGContext, hour: Double, center: CGPoint, rMax: CGFloat, side: CGFloat) {
-        let inner = point(hour: hour, radius: rMax * CGFloat(DailyRingLayout.cavityRadius), center: center)
+        let inner = point(hour: hour, radius: rMax * 0.05, center: center)
         let outer = point(hour: hour, radius: rMax * 1.04, center: center)
         ctx.saveGState()
         ctx.setLineWidth(1.2)

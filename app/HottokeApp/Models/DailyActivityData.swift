@@ -23,7 +23,7 @@ struct DailyActivityData: Equatable {
 
     var totalActiveSeconds: TimeInterval {
         segments
-            .filter { $0.kind != .stationary && $0.kind != .unknown }
+            .filter { $0.kind != .stationary && $0.kind != .unknown && $0.kind != .sleeping }
             .reduce(0) { $0 + $1.duration }
     }
 
@@ -36,7 +36,7 @@ struct DailyActivityData: Equatable {
     /// 「歩行していた」とみなすフォールバックを設ける（例: 1万歩超えているのに活動区間の
     /// 検出漏れで「静かに過ごした1日」の模様になってしまう問題への対応）。
     var dominantMovingKind: ActivityKind? {
-        let moving = segments.filter { $0.kind != .stationary && $0.kind != .unknown }
+        let moving = segments.filter { $0.kind != .stationary && $0.kind != .unknown && $0.kind != .sleeping }
         if !moving.isEmpty {
             let totals = Dictionary(grouping: moving, by: { $0.kind })
                 .mapValues { $0.reduce(0) { $0 + $1.duration } }

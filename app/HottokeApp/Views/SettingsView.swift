@@ -12,6 +12,14 @@ struct SettingsView: View {
                 Section("権限") {
                     LabeledContent("モーション & フィットネス", value: motionStatusText)
                 }
+                Section("「1日の輪」について") {
+                    Text("「乗り物」は電車・バス・車です。iPhoneの動き検出（CoreMotion）は電車と車を区別できないため、まとめて表示します。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("「睡眠」は、夜間（20時〜翌4時ごろに始まり、正午までに終わる）に3時間以上動かなかった時間から推定しています。夜更かしで動かずにスマホを見ていた時間も、睡眠として表示されることがあります。")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
                 Section("サブスクリプション") {
                     Text("PROプラン（追加機能）は準備中です。実際の購入はまだできません。")
                         .font(.footnote)

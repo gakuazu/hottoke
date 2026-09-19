@@ -74,7 +74,7 @@ final class DailyRingLayoutTests: XCTestCase {
     func testRadiusIsMonotonicInIntensityWithMinimumOutsideCavity() {
         let zero = DailyRingLayout.radiusFraction(forIntensity: 0)
         XCTAssertEqual(zero, DailyRingLayout.minimumOuterRadius, accuracy: 1e-12)
-        XCTAssertGreaterThan(zero, DailyRingLayout.cavityRadius, "静止でも空洞の外に見える最小半径を持つ")
+        XCTAssertGreaterThan(zero, 0.2, "静止でも見える最小半径を持つ")
 
         var previous = zero
         for s in stride(from: 5, through: 400, by: 5) {
@@ -111,6 +111,62 @@ final class DailyRingLayoutTests: XCTestCase {
         let i = 10 * 12 + 6
         XCTAssertGreaterThan(density.rawWeights[.walking]![i], 0.5, "検出漏れでも歩数があれば歩行の色が出る")
         XCTAssertGreaterThan(density.rawIntensity[i], 0)
+    }
+
+    // MARK: - 中心の密度勾配（空洞の縁をくっきりさせない）
+
+    func testCenterDensityRisesSmoothlyFromZero() {
+        XCTAssertEqual(DailyRingLayout.centerDensity(atRadius: 0), 0, accuracy: 1e-12)
+        XCTAssertEqual(DailyRingLayout.centerDensity(atRadius: 1), 1, accuracy: 1e-12)
+        var previous = 0.0
+        var maxStep = 0.0
+        var r = 0.0
+        while r <= 0.5 {
+            let d = DailyRingLayout.centerDensity(atRadius: r)
+            XCTAssertGreaterThanOrEqual(d, previous - 1e-12, "外へ向かって密度が減っている")
+            maxStep = max(maxStep, d - previous)
+            previous = d
+            r += 0.005
+        }
+        XCTAssertLessThan(maxStep, 0.08, "密度が急に立ち上がっている（縁がくっきりする）")
+        XCTAssertGreaterThan(DailyRingLayout.centerDensity(atRadius: 0.2), DailyRingLayout.centerDensity(atRadius: 0.08))
+    }
+
+    func testRadialMassInverseAndCapacity() {
+        for r in stride(from: 0.05, through: 1.0, by: 0.05) {
+            let m = DailyRingLayout.radialMass(upTo: r)
+            XCTAssertEqual(DailyRingLayout.radiusForMass(m), r, accuracy: 0.002)
+        }
+        // 中心付近の点が薄いぶん、一様に埋めた場合より容量は少ない
+        XCTAssertLessThan(DailyRingLayout.radialMass(upTo: 0.5), 0.5 * 0.5 / 2)
+        XCTAssertGreaterThan(DailyRingLayout.dotCapacityPerSlice(outerRadius: 0.8), DailyRingLayout.dotCapacityPerSlice(outerRadius: 0.4))
+    }
+
+    func testFewerDotsNearCenterThanUniform() {
+        let now = date(2026, 9, 19, 9, 0)
+        let density = DailyRingLayout.makeDensity(data: makeData(day: date(2026, 9, 18), hourlySteps: steps([10: 6000]), segments: segments(day: 18, [(0, 0, 10, 0, .stationary), (10, 0, 11, 0, .walking), (11, 0, 24, 0, .stationary)])), now: now, calendar: calendar)
+        let dots = DailyRingLayout.makeDots(density: density, seed: 5).filter { $0.role == .dot && $0.hour >= 10 && $0.hour < 11 }
+        let inner = dots.filter { $0.radius < 0.10 }.count
+        let uniformShare = (0.10 * 0.10) / (0.6 * 0.6) // 半径0.6まで一様に埋めた場合の、半径0.1以内の割合
+        XCTAssertLessThan(Double(inner) / Double(dots.count), uniformShare)
+    }
+
+    // MARK: - 睡眠の種別
+
+    func testSleepingIsARingKindWithDistinctColorAndZeroIntensity() {
+        XCTAssertTrue(DailyRingLayout.kindOrder.contains(.sleeping))
+        XCTAssertNotEqual(DailyRingLayout.ringColor(for: .sleeping), DailyRingLayout.ringColor(for: .stationary))
+        XCTAssertEqual(ActivityKind.sleeping.displayName, "睡眠")
+        XCTAssertEqual(ActivityKind.automotive.displayName, "乗り物")
+        XCTAssertEqual(ActivityKind.running.displayName, "ランニング")
+
+        let now = date(2026, 9, 19, 23, 30)
+        let data = makeData(day: now, segments: [seg(19, 1, 0, 6, 0, .sleeping)])
+        let density = DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar)
+        let i = 3 * 12
+        XCTAssertEqual(density.rawWeights[.sleeping]![i], 1, accuracy: 1e-9)
+        XCTAssertEqual(density.rawIntensity[i], 0, accuracy: 1e-9)
+        XCTAssertEqual(density.outerRadius(at: 3.5), DailyRingLayout.minimumOuterRadius, accuracy: 1e-6)
     }
 
     // MARK: - 描画範囲（今日の途中 / 過去日）
@@ -183,7 +239,7 @@ final class DailyRingLayoutTests: XCTestCase {
             let outer = density.outerRadius(at: dot.hour)
             switch dot.role {
             case .dot, .bokeh:
-                XCTAssertGreaterThanOrEqual(dot.radius, DailyRingLayout.cavityRadius - 1e-9, "空洞の中に点がある")
+                XCTAssertGreaterThanOrEqual(dot.radius, 0, "半径が負")
                 XCTAssertLessThanOrEqual(dot.radius, outer + 1e-9, "外側の輪郭をはみ出している")
             case .spray:
                 XCTAssertGreaterThanOrEqual(dot.radius, outer - 1e-9)

@@ -35,18 +35,34 @@ final class ActivityDataService {
         // 対象日が今日なら現在時刻まで、過去の日ならその日の24時までを取得範囲とする。
         let end = min(endOfDay, now)
 
-        let segments: [ActivitySegment]
-        if CMMotionActivityManager.isActivityAvailable() {
-            segments = await queryActivitySegments(from: startOfDay, to: end)
-        } else {
-            segments = []
-        }
-
         let (steps, distance, floors) = await queryPedometerTotals(from: startOfDay, to: end)
 
         var hourly = Array(repeating: 0, count: 24)
         if includeHourlySteps {
             hourly = await queryHourlySteps(startOfDay: startOfDay, until: end, calendar: calendar)
+        }
+
+        // 睡眠の推定（SleepEstimator）は、前日の夜〜翌日の昼にまたがるので、対象日の前後12時間ぶんも
+        // 取得して判定し、そのあと対象日の範囲に切り落とす。前後の日の歩数は分からないので0とみなす。
+        let segments: [ActivitySegment]
+        if CMMotionActivityManager.isActivityAvailable() {
+            let windowStart = startOfDay.addingTimeInterval(-12 * 3600)
+            let windowEnd = min(endOfDay.addingTimeInterval(12 * 3600), now)
+            let raw = windowEnd > windowStart ? await queryActivitySegments(from: windowStart, to: windowEnd) : []
+            let hourlySnapshot = hourly
+            let estimated = SleepEstimator.estimate(
+                segments: raw,
+                windowStart: windowStart,
+                windowEnd: windowEnd,
+                stepsInHour: { hourStart in
+                    let index = Int(floor(hourStart.timeIntervalSince(startOfDay) / 3600))
+                    return (0..<24).contains(index) ? hourlySnapshot[index] : 0
+                },
+                calendar: calendar
+            )
+            segments = SleepEstimator.clip(estimated, from: startOfDay, to: end)
+        } else {
+            segments = []
         }
 
         return DailyActivityData(

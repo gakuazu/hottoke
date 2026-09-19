@@ -8,6 +8,8 @@ enum ActivityKind: String, CaseIterable, Equatable {
     case running
     case automotive
     case cycling
+    /// 夜間の長い静止区間から推定した睡眠（SleepEstimator）。CoreMotionが直接返す種別ではない。
+    case sleeping
     case unknown
 
     init(activity: CMMotionActivity) {
@@ -30,9 +32,10 @@ enum ActivityKind: String, CaseIterable, Equatable {
         switch self {
         case .stationary: return "静止"
         case .walking: return "歩行"
-        case .running: return "走行"
-        case .automotive: return "車移動"
+        case .running: return "ランニング"
+        case .automotive: return "乗り物"
         case .cycling: return "自転車"
+        case .sleeping: return "睡眠"
         case .unknown: return "不明"
         }
     }
@@ -51,7 +54,7 @@ struct ActivityStyle: Equatable {
 
     static func style(for kind: ActivityKind) -> ActivityStyle {
         switch kind {
-        case .stationary:
+        case .stationary, .sleeping:
             // ゆったり回転する瞑想的な模様
             return ActivityStyle(rotationSpeed: 0.06, deformationIntensity: 0.15, noiseAmount: 0.03, flowBias: .zero, radialBurstBias: 0)
         case .walking:

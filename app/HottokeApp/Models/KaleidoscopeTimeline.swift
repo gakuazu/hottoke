@@ -16,7 +16,7 @@ enum KaleidoscopeTimelineBuilder {
     /// 長い静止区間が動画内で不自然に間延びしないようにする。
     private static func intensityWeight(_ kind: ActivityKind) -> Double {
         switch kind {
-        case .stationary, .unknown: return 0.22
+        case .stationary, .sleeping, .unknown: return 0.22
         case .walking: return 1.0
         case .running: return 1.6
         case .automotive: return 0.75

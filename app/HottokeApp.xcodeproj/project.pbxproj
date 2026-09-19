@@ -38,6 +38,8 @@
 		8C077A57AC634DC6804CE45C /* DailyRingRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D936DF7BC040498212BA24 /* DailyRingRenderer.swift */; };
 		4C91C7EB2C1147C0B5B6C32C /* DailyRingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2045706773D4DB9ACD520A0 /* DailyRingView.swift */; };
 		A5CBE56FAA14403E9FA0D73C /* DailyRingLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */; };
+		B3FC32C490CE496DA98F4F4C /* SleepEstimator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0E1B0C6AD5B48ECB76ECC19 /* SleepEstimator.swift */; };
+		7B8C8D855AD34E52A530C70E /* SleepEstimatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -85,6 +87,8 @@
 		20D936DF7BC040498212BA24 /* DailyRingRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRingRenderer.swift; sourceTree = "<group>"; };
 		D2045706773D4DB9ACD520A0 /* DailyRingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRingView.swift; sourceTree = "<group>"; };
 		3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DailyRingLayoutTests.swift; sourceTree = "<group>"; };
+		E0E1B0C6AD5B48ECB76ECC19 /* SleepEstimator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepEstimator.swift; sourceTree = "<group>"; };
+		18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepEstimatorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -143,6 +147,7 @@
 		B1791874F6FC1762A1275743 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				E0E1B0C6AD5B48ECB76ECC19 /* SleepEstimator.swift */,
 				8018C9C258744094A63C9517 /* DailyRingLayout.swift */,
 				DC00F62B21241D9A2A0306F1 /* ActivityKind.swift */,
 				E1B4B672EBB17A9EE9C7A23F /* DailyActivityData.swift */,
@@ -185,6 +190,7 @@
 		CBC2F7D239C5059FF39FBF19 /* HottokeAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */,
 				3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */,
 				2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */,
 			);
@@ -274,6 +280,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7B8C8D855AD34E52A530C70E /* SleepEstimatorTests.swift in Sources */,
 				A5CBE56FAA14403E9FA0D73C /* DailyRingLayoutTests.swift in Sources */,
 				8057CEED4BDEE521B444BA03 /* KaleidoscopeLogicTests.swift in Sources */,
 			);
@@ -283,6 +290,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B3FC32C490CE496DA98F4F4C /* SleepEstimator.swift in Sources */,
 				4C91C7EB2C1147C0B5B6C32C /* DailyRingView.swift in Sources */,
 				8C077A57AC634DC6804CE45C /* DailyRingRenderer.swift in Sources */,
 				E694B2C1F0134AC5B192234D /* DailyRingLayout.swift in Sources */,

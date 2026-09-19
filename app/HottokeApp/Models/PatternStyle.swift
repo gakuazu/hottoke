@@ -111,7 +111,7 @@ enum PatternStyle: String, CaseIterable, Equatable, Codable, Identifiable {
 extension PatternStyle {
     static func style(for kind: ActivityKind) -> PatternStyle {
         switch kind {
-        case .stationary, .unknown, .automotive:
+        case .stationary, .sleeping, .unknown, .automotive:
             return .waves
         case .walking:
             return .tiling
