@@ -159,6 +159,16 @@ enum KaleidoscopeRenderer {
         let effectiveDetail = KaleidoscopeDynamics.effectiveDetail(base: detail, time: time)
         let R = Double(radius)
 
+        drawPattern(ctx: ctx, style: style, R: R, palette: colors, time: time, detail: effectiveDetail, symmetryCount: symmetryCount, seed: seed)
+
+        ctx.restoreGState() // クリップを解除
+        ctx.restoreGState() // 平行移動を解除
+        return ctx.makeImage()
+    }
+
+    /// 数学模様9スタイルの描き分け（扇形ビットマップと「1日の輪」の両方から使う共通部分）。
+    /// ctxの原点(0,0)を模様の中心として、半径Rの範囲に描く。
+    private static func drawPattern(ctx: CGContext, style: PatternStyle, R: Double, palette colors: [CGColor], time: Double, detail effectiveDetail: Double, symmetryCount: Int, seed: UInt64) {
         switch style {
         case .tiling:
             renderTiling(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, seed: seed)
@@ -179,9 +189,29 @@ enum KaleidoscopeRenderer {
         case .flower:
             renderFlower(ctx: ctx, R: R, palette: colors, t: time, detail: effectiveDetail, n: symmetryCount, seed: seed)
         }
+    }
 
-        ctx.restoreGState() // クリップを解除
-        ctx.restoreGState() // 平行移動を解除
+    /// 「1日の輪」用の部品: 1つのスタイルの模様を、扇形にせず円盤状（中心=画像の中心、半径=radius）に
+    /// そのまま描いた画像を返す。万華鏡の回転コピー・鏡映は行わない。
+    /// `symmetryCount`は各スタイルが内部で使う周期パラメータ（波の山の数、スピログラフの巻き数など）。
+    /// フラクタルは幹を扇形の角度幅に割り振るため、円全体に広げたいときは1を渡す。
+    static func renderPatternDiskImage(style: PatternStyle, radius: CGFloat, palette: KaleidoscopePalette, detail: Double, seed: UInt64, time: Double, symmetryCount: Int) -> CGImage? {
+        guard radius > 0 else { return nil }
+        let dimension = max(2, Int(radius.rounded(.up)) * 2)
+        let colors = palette.cgColors
+        guard !colors.isEmpty else { return nil }
+        guard let ctx = CGContext(
+            data: nil,
+            width: dimension,
+            height: dimension,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+        let tip = CGFloat(dimension) / 2
+        ctx.translateBy(x: tip, y: tip)
+        drawPattern(ctx: ctx, style: style, R: Double(radius), palette: colors, time: time, detail: detail, symmetryCount: max(1, symmetryCount), seed: seed)
         return ctx.makeImage()
     }
 

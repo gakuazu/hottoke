@@ -21,9 +21,9 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>NSMotionUsageDescription</key>
-	<string>今日の活動データから万華鏡模様の動画を作るために使います。データは端末の外へは一切送信しません。</string>
+	<string>今日の活動データから模様の動画や「1日の輪」の画像を作るために使います。データは端末の外へは一切送信しません。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>作成した模様の動画をあなたの写真ライブラリに保存するために使います。</string>
+	<string>作成した模様の動画や画像をあなたの写真ライブラリに保存するために使います。</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiresFullScreen</key>

@@ -8,6 +8,8 @@ struct RootTabView: View {
         TabView {
             TodayView()
                 .tabItem { Label("今日", systemImage: "sparkles") }
+            DailyRingView()
+                .tabItem { Label("1日の輪", systemImage: "circle.dashed") }
             ManualModeView()
                 .tabItem { Label("手動", systemImage: "hand.draw") }
             CalendarArchiveView()

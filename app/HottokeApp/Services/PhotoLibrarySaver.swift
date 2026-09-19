@@ -1,5 +1,6 @@
 import Photos
 import Foundation
+import UIKit
 
 /// docs/02-spec.md 2章・6章: 保存機能はカメラロールへの「追加のみ」権限で完結させる
 /// （読み取り権限は要求しない設計）。
@@ -20,6 +21,22 @@ enum PhotoLibrarySaver {
                     continuation.resume(returning: ())
                 } else {
                     continuation.resume(throwing: error ?? SaveError(message: "動画の保存に失敗しました。"))
+                }
+            }
+        }
+    }
+
+    /// 静止画（「1日の輪」など）をカメラロールに追加する。動画と同じく「追加のみ」権限で完結する。
+    static func saveImage(_ image: UIImage) async throws {
+        try await requestAuthorizationIfNeeded()
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            PHPhotoLibrary.shared().performChanges({
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            }) { success, error in
+                if success {
+                    continuation.resume(returning: ())
+                } else {
+                    continuation.resume(throwing: error ?? SaveError(message: "画像の保存に失敗しました。"))
                 }
             }
         }

@@ -17,6 +17,9 @@ struct DailyActivityData: Equatable {
     let distanceMeters: Double
     let floorsAscended: Int
     let floorAscendTimes: [Date] // MVPでは未使用（将来、階段区間の正確なタイミングを扱う場合に使う）
+    /// 1時間ごとの歩数（0時台〜23時台の24要素）。「1日の輪」の半径に使う。
+    /// 既存の呼び出し側を壊さないよう省略可（省略時はすべて0）。今日の場合、まだ来ていない時間帯は0。
+    var hourlySteps: [Int] = Array(repeating: 0, count: 24)
 
     var totalActiveSeconds: TimeInterval {
         segments
