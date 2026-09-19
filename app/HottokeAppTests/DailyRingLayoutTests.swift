@@ -463,13 +463,24 @@ final class DailyRingLayoutTests: XCTestCase {
         let typicalDensity = DailyRingLayout.makeDensity(slices: typicalRecord)
         let todayDensity = DailyRingLayout.makeDensity(slices: todayRecord)
 
-        // 表現スタイルごと（普通の日 + 過去6日を重ねる）
+        // 表現スタイルごと（普通の日 + 過去6日を重ねる）。描画時間（CIのシミュレータ・デバッグビルドでの参考値）も記録する。
+        var timings = ""
         for style in RingArtStyle.allCases {
             var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
             options.style = style
             options.pastDays = style.usesPastDays ? past6 : []
-            try writePNG(DailyRingRenderer.render(density: typicalDensity, date: date(2026, 9, 18), options: options, calendar: calendar), "ring-style-\(style.rawValue).png")
+            let started = Date()
+            let image = DailyRingRenderer.render(density: typicalDensity, date: date(2026, 9, 18), options: options, calendar: calendar)
+            timings += String(format: "%@ 1080px: %.2f秒\n", style.rawValue, Date().timeIntervalSince(started))
+            try writePNG(image, "ring-style-\(style.rawValue).png")
         }
+        var highOptions = RingRenderOptions(canvas: CGSize(width: 2160, height: 2160))
+        highOptions.pastDays = past6
+        let highStarted = Date()
+        let highImage = DailyRingRenderer.render(density: typicalDensity, date: date(2026, 9, 18), options: highOptions, calendar: calendar)
+        timings += String(format: "flowerCorona 2160px: %.2f秒\n", Date().timeIntervalSince(highStarted))
+        _ = highImage
+        try timings.write(to: URL(fileURLWithPath: dir).appendingPathComponent("timings.txt"), atomically: true, encoding: .utf8)
         // 今日の途中（14:20まで）: 花のコロナ・週の年輪・オーロラ
         for style in [RingArtStyle.flowerCorona, .yearRings, .aurora, .multiFlower] {
             var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))

@@ -529,7 +529,7 @@ enum RingArtStyles {
                 region.addLine(to: g.point(angle: A0 + (A1 - A0) * Double(k) / 8, radius: rOut))
             }
             region.closeSubpath()
-            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [p.cg(col, 0.30), p.cg(col, 0)] as CFArray, locations: [0, 1]) {
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [p.cg(col, 0.2), p.cg(col, 0)] as CFArray, locations: [0, 1]) {
                 p.ctx.saveGState()
                 p.ctx.addPath(region)
                 p.ctx.clip()
@@ -538,7 +538,7 @@ enum RingArtStyles {
             }
 
             // アーチの糸
-            let strands = 5 + Int((7 * e.strength).rounded())
+            let strands = 4 + Int((5 * e.strength).rounded())
             for _ in 0..<strands {
                 let sc = 0.45 + 0.55 * pow(rand(&rng), 0.7)
                 let j0 = (rand(&rng) - 0.5) * half * 0.5, j1 = (rand(&rng) - 0.5) * half * 0.5
@@ -549,7 +549,7 @@ enum RingArtStyles {
                 let p2 = g.point(angle: A1 + j1 + splay, radius: rOut + H * CGFloat(sc) * 1.3)
                 let p3 = g.point(angle: A1 + j1, radius: rf)
                 p.ctx.setLineCap(.round)
-                for (width, color, alpha) in [(7 * g.u, col, 0.04), (1.6 * g.u, col, 0.5), (0.8 * g.u, p.hot(col, 0.25), 0.45)] as [(CGFloat, RingRGB, Double)] {
+                for (width, color, alpha) in [(7 * g.u, col, 0.03), (1.5 * g.u, col, 0.32), (0.8 * g.u, p.hot(col, 0.2), 0.28)] as [(CGFloat, RingRGB, Double)] {
                     p.ctx.setLineWidth(width)
                     p.ctx.setStrokeColor(p.cg(color, alpha))
                     p.ctx.move(to: p0)
@@ -560,7 +560,7 @@ enum RingArtStyles {
                 for _ in 0..<sparks {
                     let pt = bezier(CGFloat(rand(&rng)), p0, p1, p2, p3)
                     p.dot(CGPoint(x: pt.x + CGFloat(rand(&rng) - 0.5) * 4 * g.u, y: pt.y + CGFloat(rand(&rng) - 0.5) * 4 * g.u),
-                          radius: (1.2 + 1.6 * CGFloat(rand(&rng))) * g.u, color: p.hot(col, 0.3), alpha: 0.7)
+                          radius: (1.2 + 1.6 * CGFloat(rand(&rng))) * g.u, color: p.hot(col, 0.2), alpha: 0.5)
                 }
             }
         }
@@ -580,7 +580,7 @@ enum RingArtStyles {
                 let len = R * CGFloat(0.28 + 0.72 * e.strength) * sc
                 let wd = petalWidth(g: g, baseR: r0, len: len, duration: e.duration, multiplier: 1.7, minimum: R * 0.11, maximum: R * 0.5) * sc
                 drawPetal(p, angle: RingArtRenderer.angle(hour: e.mid), baseR: r0, len: len, wid: wd, color: DailyRingLayout.ringColor(for: e.kind),
-                          alpha: 0.28 - 0.03 * Double(j), options: PetalOptions(fillMul: 0.35, strokeMul: 1.1), rng: &rng)
+                          alpha: 0.2 - 0.02 * Double(j), options: PetalOptions(fillMul: 0.35, strokeMul: 1.1), rng: &rng)
             }
         }
         // 外周の24枚の小花弁（1時間ずつ）
@@ -593,7 +593,7 @@ enum RingArtStyles {
             let len = R * CGFloat(0.17 + 0.22 * eh)
             let wd = (r0 + len * 0.33) * CGFloat(2 * Double.pi / 24 * 1.3)
             drawPetal(p, angle: RingArtRenderer.angle(hour: Double(h) + 0.5), baseR: r0, len: len, wid: wd, color: day.color(at: Double(h) + 0.5),
-                      alpha: 0.30, options: PetalOptions(fillMul: 0.85), rng: &rng)
+                      alpha: 0.22, options: PetalOptions(fillMul: 0.8), rng: &rng)
             h += 1
         }
         // 今日の活動（1回 = 1枚。3重）
@@ -602,9 +602,9 @@ enum RingArtStyles {
             let len = R * CGFloat(0.28 + 0.72 * e.strength)
             let wd = petalWidth(g: g, baseR: r0, len: len, duration: e.duration, multiplier: 1.7, minimum: R * 0.11, maximum: R * 0.5)
             let a = RingArtRenderer.angle(hour: e.mid)
-            drawPetal(p, angle: a, baseR: r0, len: len, wid: wd, color: col, alpha: 0.42, options: PetalOptions(vein: true, stipple: Int(40 + e.duration * 90)), rng: &rng)
-            drawPetal(p, angle: a, baseR: r0, len: len * 0.74, wid: wd * 0.62, color: p.hot(col, 0.1), alpha: 0.34, options: PetalOptions(), rng: &rng)
-            drawPetal(p, angle: a, baseR: r0, len: len * 0.48, wid: wd * 0.36, color: p.hot(col, 0.2), alpha: 0.34, options: PetalOptions(), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len, wid: wd, color: col, alpha: 0.30, options: PetalOptions(vein: true, stipple: Int(40 + e.duration * 90)), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len * 0.74, wid: wd * 0.62, color: p.hot(col, 0.1), alpha: 0.2, options: PetalOptions(), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len * 0.48, wid: wd * 0.36, color: p.hot(col, 0.2), alpha: 0.2, options: PetalOptions(), rng: &rng)
         }
         drawPistil(p, day: day, scale: 1, rng: &rng)
     }

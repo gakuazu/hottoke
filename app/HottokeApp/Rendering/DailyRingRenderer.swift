@@ -101,7 +101,7 @@ enum DailyRingRenderer {
         }
         drawGuides(ctx: ctx, center: center, rMax: rMax, side: side, chrome: options.chrome, style: style, twist: twist)
 
-        if style == .classic {
+        if style == .classic || style == .spiral {
             let dots = DailyRingLayout.makeDots(density: density, seed: seed)
             if let ghost = options.ghost {
                 drawGhost(ctx: ctx, ghost: ghost, seed: seed, center: center, rMax: rMax)
