@@ -593,7 +593,7 @@ enum RingArtStyles {
             let len = R * CGFloat(0.17 + 0.22 * eh)
             let wd = (r0 + len * 0.33) * CGFloat(2 * Double.pi / 24 * 1.3)
             drawPetal(p, angle: RingArtRenderer.angle(hour: Double(h) + 0.5), baseR: r0, len: len, wid: wd, color: day.color(at: Double(h) + 0.5),
-                      alpha: 0.22, options: PetalOptions(fillMul: 0.8), rng: &rng)
+                      alpha: 0.17, options: PetalOptions(fillMul: 0.8), rng: &rng)
             h += 1
         }
         // 今日の活動（1回 = 1枚。3重）
@@ -602,9 +602,9 @@ enum RingArtStyles {
             let len = R * CGFloat(0.28 + 0.72 * e.strength)
             let wd = petalWidth(g: g, baseR: r0, len: len, duration: e.duration, multiplier: 1.7, minimum: R * 0.11, maximum: R * 0.5)
             let a = RingArtRenderer.angle(hour: e.mid)
-            drawPetal(p, angle: a, baseR: r0, len: len, wid: wd, color: col, alpha: 0.30, options: PetalOptions(vein: true, stipple: Int(40 + e.duration * 90)), rng: &rng)
-            drawPetal(p, angle: a, baseR: r0, len: len * 0.74, wid: wd * 0.62, color: p.hot(col, 0.1), alpha: 0.2, options: PetalOptions(), rng: &rng)
-            drawPetal(p, angle: a, baseR: r0, len: len * 0.48, wid: wd * 0.36, color: p.hot(col, 0.2), alpha: 0.2, options: PetalOptions(), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len, wid: wd, color: col, alpha: 0.24, options: PetalOptions(vein: true, stipple: Int(40 + e.duration * 90)), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len * 0.74, wid: wd * 0.62, color: p.hot(col, 0.1), alpha: 0.14, options: PetalOptions(), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len * 0.48, wid: wd * 0.36, color: p.hot(col, 0.2), alpha: 0.14, options: PetalOptions(), rng: &rng)
         }
         drawPistil(p, day: day, scale: 1, rng: &rng)
     }
