@@ -82,6 +82,19 @@ final class ArtDay {
 
     func strength(at t: Double) -> Double { sample(strengths, at: t) }
 
+    /// スライスiの活動の割合で、活動の種類を確率的に選ぶ（境目では隣の色が混ざる）。
+    func pickKind(slice i: Int, rng: inout SeededGenerator) -> ActivityKind {
+        var total = 0.0
+        for kind in DailyRingLayout.kindOrder { total += density.smoothedWeights[kind]?[i] ?? 0 }
+        guard total > 0 else { return .stationary }
+        var target = Double.random(in: 0..<1, using: &rng) * total
+        for kind in DailyRingLayout.kindOrder {
+            target -= density.smoothedWeights[kind]?[i] ?? 0
+            if target <= 0 { return kind }
+        }
+        return .stationary
+    }
+
     func color(at t: Double) -> RingRGB {
         guard count > 0 else { return DailyRingLayout.ringColor(for: .stationary) }
         return RingRGB(r: sample(rs, at: t), g: sample(gs, at: t), b: sample(bs, at: t))
@@ -178,7 +191,15 @@ enum RingArtRenderer {
         let past = options.pastDays.map { ArtDay($0) }
 
         switch options.style {
-        case .flowerCorona, .corona, .multiFlower, .yearRings, .aurora, .spiral, .classic:
+        case .corona:
+            RingArtStyles.drawCorona(painter, day: day, rng: &rng)
+        case .multiFlower:
+            RingArtStyles.drawMultiFlower(painter, day: day, past: past, rng: &rng)
+        case .yearRings:
+            RingArtStyles.drawYearRings(painter, day: day, past: past, rng: &rng)
+        case .aurora:
+            RingArtStyles.drawAurora(painter, day: day, rng: &rng)
+        case .flowerCorona, .spiral, .classic:
             RingArtStyles.drawFlowerCorona(painter, day: day, past: past, rng: &rng)
         }
 
@@ -462,5 +483,237 @@ enum RingArtStyles {
             drawPetal(p, angle: a, baseR: rOut * 0.985, len: len * 0.7, wid: wd * 0.6, color: p.hot(col, 0.12), alpha: 0.36, options: PetalOptions(), rng: &rng)
         }
         drawPistil(p, day: day, scale: 0.7, rng: &rng)
+    }
+
+    // MARK: 共通の小道具
+
+    static func bezier(_ t: CGFloat, _ p0: CGPoint, _ p1: CGPoint, _ p2: CGPoint, _ p3: CGPoint) -> CGPoint {
+        let m = 1 - t
+        let a = m * m * m, b = 3 * m * m * t, c = 3 * m * t * t, d = t * t * t
+        return CGPoint(x: a * p0.x + b * p1.x + c * p2.x + d * p3.x, y: a * p0.y + b * p1.y + c * p2.y + d * p3.y)
+    }
+
+    /// ゆるやかな揺らぎ（-1...1くらい）。オーロラの起伏に使う。
+    static func noise(_ x: Double) -> Double {
+        sin(x) * 0.5 + sin(x * 2.31 + 1.7) * 0.3 + sin(x * 4.13 + 0.4) * 0.2
+    }
+
+    static func rand(_ rng: inout SeededGenerator) -> Double { Double.random(in: 0..<1, using: &rng) }
+
+    // MARK: A コロナ（時間のリング + 噴き出すアーチ）
+
+    static func drawCorona(_ p: ArtPainter, day: ArtDay, rng: inout SeededGenerator) {
+        let g = p.g
+        let R = g.R
+        let rIn = R * 0.45, rOut = R * 0.57, wid = rOut - rIn
+        drawRing(p, day: day, rIn: rIn, rOut: rOut, rng: &rng)
+        drawFur(p, day: day, rBase: rOut - wid * 0.1, count: Int(3800 * day.drawn / 24), maxLen: 0.38, rng: &rng)
+
+        for e in day.episodes {
+            let col = DailyRingLayout.ringColor(for: e.kind)
+            let a0 = RingArtRenderer.angle(hour: e.start), a1 = RingArtRenderer.angle(hour: e.end)
+            let mid = (a0 + a1) / 2
+            let half = max((a1 - a0) / 2, 0.055)
+            let A0 = mid - half, A1 = mid + half
+            let H = R * CGFloat(0.06 + 0.36 * e.strength)
+
+            // アーチの内側のうっすらした面
+            let q0 = g.point(angle: A0, radius: rOut)
+            let q1 = g.point(angle: A0 - half * 0.3, radius: rOut + H * 1.3)
+            let q2 = g.point(angle: A1 + half * 0.3, radius: rOut + H * 1.3)
+            let q3 = g.point(angle: A1, radius: rOut)
+            let region = CGMutablePath()
+            region.move(to: q0)
+            region.addCurve(to: q3, control1: q1, control2: q2)
+            for k in stride(from: 8, through: 0, by: -1) {
+                region.addLine(to: g.point(angle: A0 + (A1 - A0) * Double(k) / 8, radius: rOut))
+            }
+            region.closeSubpath()
+            if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [p.cg(col, 0.30), p.cg(col, 0)] as CFArray, locations: [0, 1]) {
+                p.ctx.saveGState()
+                p.ctx.addPath(region)
+                p.ctx.clip()
+                p.ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: g.cx, y: g.cy), startRadius: rOut, endCenter: CGPoint(x: g.cx, y: g.cy), endRadius: rOut + H * 1.05, options: [])
+                p.ctx.restoreGState()
+            }
+
+            // アーチの糸
+            let strands = 5 + Int((7 * e.strength).rounded())
+            for _ in 0..<strands {
+                let sc = 0.45 + 0.55 * pow(rand(&rng), 0.7)
+                let j0 = (rand(&rng) - 0.5) * half * 0.5, j1 = (rand(&rng) - 0.5) * half * 0.5
+                let rf = rOut - wid * 0.05
+                let splay = half * (0.2 + 0.5 * rand(&rng))
+                let p0 = g.point(angle: A0 + j0, radius: rf)
+                let p1 = g.point(angle: A0 + j0 - splay, radius: rOut + H * CGFloat(sc) * 1.3)
+                let p2 = g.point(angle: A1 + j1 + splay, radius: rOut + H * CGFloat(sc) * 1.3)
+                let p3 = g.point(angle: A1 + j1, radius: rf)
+                p.ctx.setLineCap(.round)
+                for (width, color, alpha) in [(7 * g.u, col, 0.04), (1.6 * g.u, col, 0.5), (0.8 * g.u, p.hot(col, 0.25), 0.45)] as [(CGFloat, RingRGB, Double)] {
+                    p.ctx.setLineWidth(width)
+                    p.ctx.setStrokeColor(p.cg(color, alpha))
+                    p.ctx.move(to: p0)
+                    p.ctx.addCurve(to: p3, control1: p1, control2: p2)
+                    p.ctx.strokePath()
+                }
+                let sparks = 3 + Int(rand(&rng) * 4)
+                for _ in 0..<sparks {
+                    let pt = bezier(CGFloat(rand(&rng)), p0, p1, p2, p3)
+                    p.dot(CGPoint(x: pt.x + CGFloat(rand(&rng) - 0.5) * 4 * g.u, y: pt.y + CGFloat(rand(&rng) - 0.5) * 4 * g.u),
+                          radius: (1.2 + 1.6 * CGFloat(rand(&rng))) * g.u, color: p.hot(col, 0.3), alpha: 0.7)
+                }
+            }
+        }
+    }
+
+    // MARK: B 多重の花
+
+    static func drawMultiFlower(_ p: ArtPainter, day: ArtDay, past: [ArtDay], rng: inout SeededGenerator) {
+        let g = p.g
+        let R = g.R
+        let r0 = R * 0.075
+
+        // 背後に、過去の日の花びら（小さく薄く）
+        for j in stride(from: past.count - 1, through: 0, by: -1) {
+            let sc = CGFloat(1 - 0.115 * Double(j + 1))
+            for e in past[j].episodes {
+                let len = R * CGFloat(0.28 + 0.72 * e.strength) * sc
+                let wd = petalWidth(g: g, baseR: r0, len: len, duration: e.duration, multiplier: 1.7, minimum: R * 0.11, maximum: R * 0.5) * sc
+                drawPetal(p, angle: RingArtRenderer.angle(hour: e.mid), baseR: r0, len: len, wid: wd, color: DailyRingLayout.ringColor(for: e.kind),
+                          alpha: 0.28 - 0.03 * Double(j), options: PetalOptions(fillMul: 0.35, strokeMul: 1.1), rng: &rng)
+            }
+        }
+        // 外周の24枚の小花弁（1時間ずつ）
+        var h = 0
+        while h < 24 && Double(h) < day.drawn {
+            let lo = h * 12, hi = min(day.count, lo + 12)
+            var sum = 0.0, cnt = 0.0
+            if lo < hi { for i in lo..<hi { sum += day.strengths[i]; cnt += 1 } }
+            let eh = cnt > 0 ? sum / cnt : 0
+            let len = R * CGFloat(0.17 + 0.22 * eh)
+            let wd = (r0 + len * 0.33) * CGFloat(2 * Double.pi / 24 * 1.3)
+            drawPetal(p, angle: RingArtRenderer.angle(hour: Double(h) + 0.5), baseR: r0, len: len, wid: wd, color: day.color(at: Double(h) + 0.5),
+                      alpha: 0.30, options: PetalOptions(fillMul: 0.85), rng: &rng)
+            h += 1
+        }
+        // 今日の活動（1回 = 1枚。3重）
+        for e in day.episodes {
+            let col = DailyRingLayout.ringColor(for: e.kind)
+            let len = R * CGFloat(0.28 + 0.72 * e.strength)
+            let wd = petalWidth(g: g, baseR: r0, len: len, duration: e.duration, multiplier: 1.7, minimum: R * 0.11, maximum: R * 0.5)
+            let a = RingArtRenderer.angle(hour: e.mid)
+            drawPetal(p, angle: a, baseR: r0, len: len, wid: wd, color: col, alpha: 0.42, options: PetalOptions(vein: true, stipple: Int(40 + e.duration * 90)), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len * 0.74, wid: wd * 0.62, color: p.hot(col, 0.1), alpha: 0.34, options: PetalOptions(), rng: &rng)
+            drawPetal(p, angle: a, baseR: r0, len: len * 0.48, wid: wd * 0.36, color: p.hot(col, 0.2), alpha: 0.34, options: PetalOptions(), rng: &rng)
+        }
+        drawPistil(p, day: day, scale: 1, rng: &rng)
+    }
+
+    // MARK: D 週の年輪
+
+    /// 半径 = 何日前か。外側が今日（`day`）、内側へ過去の日（`past`、新しい順）。各輪は、強い時刻ほど厚く点が広がる。
+    static func drawYearRings(_ p: ArtPainter, day: ArtDay, past: [ArtDay], rng: inout SeededGenerator) {
+        let g = p.g
+        let R = g.R
+        let all = [day] + past
+        let n = all.count
+        let pitch = min(0.105, 0.80 / Double(max(n, 1)))
+        let scale = CGFloat(pitch / 0.105)
+        let bw = R * 0.07 * scale
+        let fade = n > 7 ? 0.95 : 0.8
+        let dth = 2 * Double.pi * DailyRingLayout.sliceHours / 24
+
+        for j in stride(from: n - 1, through: 0, by: -1) {
+            let dj = all[j]
+            let rc = R * CGFloat(0.88 - pitch * Double(j))
+            let alpha = max(0.2, 0.9 * pow(fade, Double(j)))
+            let rr = (j == 0 ? 1.5 : 1.25) * g.u * sqrt(scale)
+            let dotArea = Double(Double.pi * Double(rr * rr))
+            let L = rc - 0.45 * bw
+            // レール（うっすらした円）
+            p.ctx.setStrokeColor(p.cg(DailyRingLayout.ringColor(for: .stationary), 0.06))
+            p.ctx.setLineWidth(g.u)
+            p.ctx.strokeEllipse(in: CGRect(x: g.cx - rc, y: g.cy - rc, width: rc * 2, height: rc * 2))
+            for i in 0..<dj.count {
+                let ee = dj.strengths[i]
+                let U = rc + bw * CGFloat(0.15 + ee)
+                let cap = 0.55 * Double((U * U - L * L) / 2) * dth / dotArea
+                var cnt = Int(cap.rounded(.down))
+                if rand(&rng) < cap - Double(cnt) { cnt += 1 }
+                if cnt <= 0 { continue }
+                for _ in 0..<cnt {
+                    let t = (Double(i) + rand(&rng)) * DailyRingLayout.sliceHours
+                    let e2 = dj.strength(at: t)
+                    let U2 = rc + bw * CGFloat(0.15 + e2)
+                    let r = CGFloat((Double(L * L) + rand(&rng) * Double(U2 * U2 - L * L)).squareRoot())
+                    let depth = Double((r - L) / max(0.001, U2 - L))
+                    let kind = dj.pickKind(slice: i, rng: &rng)
+                    let color = p.hot(DailyRingLayout.ringColor(for: kind), 0.3 * depth * depth)
+                    p.dot(g.point(hour: t, radius: r), radius: rr * 1.5 * CGFloat(0.8 + 0.5 * rand(&rng)), color: color, alpha: alpha * (0.55 + 0.45 * depth))
+                }
+            }
+        }
+        p.dot(CGPoint(x: g.cx, y: g.cy), radius: R * 0.2, color: day.averageColor, alpha: 0.22)
+    }
+
+    // MARK: C オーロラ
+
+    static func drawAurora(_ p: ArtPainter, day: ArtDay, rng: inout SeededGenerator) {
+        let g = p.g
+        let R = g.R
+        let K = 8, steps = 720
+        let sliceH = 24.0 / Double(steps)
+        // 中心のやわらかい光
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [p.cg(day.averageColor, 0.12), p.cg(day.averageColor, 0)] as CFArray, locations: [0, 1]) {
+            p.ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: g.cx, y: g.cy), startRadius: 0, endCenter: CGPoint(x: g.cx, y: g.cy), endRadius: R * 0.4, options: [])
+        }
+        var tops = [[CGFloat]](repeating: [CGFloat](repeating: -1, count: steps), count: K)
+        var thick = [[CGFloat]](repeating: [CGFloat](repeating: 0, count: steps), count: K)
+        p.ctx.setLineCap(.butt)
+        for k in 0..<K {
+            let ph = (Double(k) - Double(K - 1) / 2) * 0.24
+            let sK = 0.70 + 0.05 * Double(k)
+            var prev: CGPoint?
+            for s in 0..<steps {
+                let t = (Double(s) + 0.5) * sliceH
+                if t >= day.drawn { prev = nil; continue }
+                var te = t + ph
+                if day.isPeriodic { te = (te.truncatingRemainder(dividingBy: 24) + 24).truncatingRemainder(dividingBy: 24) }
+                else { te = min(max(te, 0), day.drawn - 0.01) }
+                let e = day.strength(at: te)
+                let kf = Double(k) / Double(K)
+                let top = R * CGFloat(0.24 + 0.16 * kf + 0.58 * sK * e) + R * 0.022 * CGFloat(noise(t * 0.9 + Double(k) * 3.1) + 0.6 * noise(t * 2.7 + Double(k)))
+                let th2 = R * CGFloat(0.07 + 0.20 * e) * CGFloat(0.8 + 0.4 * kf)
+                let rin = max(R * 0.1, top - th2)
+                tops[k][s] = top
+                thick[k][s] = th2
+                let lean = 0.035 * noise(t * 1.3 + Double(k) * 5)
+                let a = RingArtRenderer.angle(hour: t)
+                let pin = g.point(angle: a, radius: rin), pout = g.point(angle: a + lean, radius: top)
+                let col = day.color(at: te)
+                let width = max(1.5 * g.u, CGFloat(2 * Double.pi) * top / CGFloat(steps) * 1.4)
+                // 内側から外側へ明るくなる光の筋（3段で近似）
+                let mid1 = CGPoint(x: pin.x + (pout.x - pin.x) * 0.45, y: pin.y + (pout.y - pin.y) * 0.45)
+                let mid2 = CGPoint(x: pin.x + (pout.x - pin.x) * 0.8, y: pin.y + (pout.y - pin.y) * 0.8)
+                p.line(pin, mid1, width: width, color: col, alpha: 0.02 + 0.02 * e, cap: .butt)
+                p.line(mid1, mid2, width: width, color: col, alpha: 0.09 + 0.06 * e, cap: .butt)
+                p.line(mid2, pout, width: width, color: p.hot(col, 0.15), alpha: 0.26 + 0.16 * e, cap: .butt)
+                if let prev { p.line(prev, pout, width: 1.2 * g.u, color: p.hot(col, 0.3), alpha: 0.38, cap: .butt) }
+                prev = pout
+            }
+        }
+        // 光の粒
+        let sparks = Int(3000 * day.drawn / 24)
+        for _ in 0..<sparks {
+            let kk = Int(rand(&rng) * Double(K))
+            let tt = rand(&rng) * day.drawn
+            let ss = min(steps - 1, Int(tt / 24 * Double(steps)))
+            let tp = tops[min(kk, K - 1)][ss]
+            if tp < 0 { continue }
+            let e = day.strength(at: tt)
+            if rand(&rng) > 0.4 + 0.6 * e { continue }
+            let r = tp - thick[min(kk, K - 1)][ss] * CGFloat(pow(rand(&rng), 1.6))
+            p.dot(g.point(hour: tt, radius: r), radius: (1 + 1.5 * CGFloat(rand(&rng))) * g.u, color: p.hot(day.color(at: tt), 0.3), alpha: 0.5 + 0.3 * rand(&rng))
+        }
     }
 }

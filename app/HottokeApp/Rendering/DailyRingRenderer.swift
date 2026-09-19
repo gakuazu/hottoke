@@ -94,11 +94,12 @@ enum DailyRingRenderer {
         let rMax = side * maxRadiusRatio
         let seed = daySeed(date: date, calendar: calendar)
         let style = options.style
+        let twist: Double = style == .spiral ? 1.5 : 0 // 渦巻きは、外へ行くほど角度をねじる
 
         if options.drawsBackground {
             drawBackground(ctx: ctx, canvas: canvas, center: center, side: side, seed: seed)
         }
-        drawGuides(ctx: ctx, center: center, rMax: rMax, side: side, chrome: options.chrome, style: style)
+        drawGuides(ctx: ctx, center: center, rMax: rMax, side: side, chrome: options.chrome, style: style, twist: twist)
 
         if style == .classic {
             let dots = DailyRingLayout.makeDots(density: density, seed: seed)
@@ -106,15 +107,15 @@ enum DailyRingRenderer {
                 drawGhost(ctx: ctx, ghost: ghost, seed: seed, center: center, rMax: rMax)
             }
             let dotScale: CGFloat = side < 600 ? 2.6 : 1 // 小さい画像（サムネイル）では点を大きめに
-            drawHaze(ctx: ctx, dots: dots, center: center, rMax: rMax, alpha: options.dotAlpha, scale: dotScale)
-            drawDots(ctx: ctx, dots: dots, center: center, rMax: rMax, alpha: options.dotAlpha, scale: dotScale)
+            drawHaze(ctx: ctx, dots: dots, center: center, rMax: rMax, alpha: options.dotAlpha, scale: dotScale, twist: twist)
+            drawDots(ctx: ctx, dots: dots, center: center, rMax: rMax, alpha: options.dotAlpha, scale: dotScale, twist: twist)
         } else if let layer = RingArtRenderer.renderLayer(density: density, options: options, seed: seed, side: side, center: center) {
             UIImage(cgImage: layer).draw(in: CGRect(origin: .zero, size: canvas), blendMode: .plusLighter, alpha: 1)
         }
         if density.isPartialDay && options.chrome != .none {
-            drawNowMarker(ctx: ctx, hour: density.drawnHours, center: center, rMax: rMax, side: side)
+            drawNowMarker(ctx: ctx, hour: density.drawnHours, center: center, rMax: rMax, side: side, twist: twist)
         }
-        drawLabels(ctx: ctx, density: density, date: date, center: center, rMax: rMax, side: side, canvas: canvas, chrome: options.chrome, caption: options.caption, style: style, calendar: calendar)
+        drawLabels(ctx: ctx, density: density, date: date, center: center, rMax: rMax, side: side, canvas: canvas, chrome: options.chrome, caption: options.caption, style: style, calendar: calendar, twist: twist)
     }
 
     /// アーカイブ用のサムネイル（文字・目盛りなしの簡易描画）。選択中の表現スタイルで描く。
@@ -140,9 +141,11 @@ enum DailyRingRenderer {
 
     // MARK: - 座標・色
 
-    static func point(hour: Double, radius: CGFloat, center: CGPoint) -> CGPoint {
-        let v = DailyRingLayout.unitVector(forHour: hour)
-        return CGPoint(x: center.x + CGFloat(v.dx) * radius, y: center.y + CGFloat(v.dy) * radius)
+    /// 時刻と半径から位置を求める。`twist`が0でなければ渦巻き（外へ行くほど角度がねじれる。`unit`は最大半径）。
+    static func point(hour: Double, radius: CGFloat, center: CGPoint, twist: Double = 0, unit: CGFloat = 1) -> CGPoint {
+        var a = DailyRingLayout.angleRadians(forHour: hour)
+        if twist != 0 { a += twist * pow(Double(radius / max(unit, 1)), 1.2) }
+        return CGPoint(x: center.x + CGFloat(sin(a)) * radius, y: center.y - CGFloat(cos(a)) * radius)
     }
 
     /// 色を白に近づける（w=0で元の色、1で白）。
@@ -224,7 +227,7 @@ enum DailyRingRenderer {
 
     // MARK: - 目盛り（控えめに）
 
-    private static func drawGuides(ctx: CGContext, center: CGPoint, rMax: CGFloat, side: CGFloat, chrome: RingChrome, style: RingArtStyle) {
+    private static func drawGuides(ctx: CGContext, center: CGPoint, rMax: CGFloat, side: CGFloat, chrome: RingChrome, style: RingArtStyle, twist: Double) {
         guard chrome != .none else { return }
         ctx.saveGState()
         ctx.setLineWidth(1)
@@ -238,11 +241,24 @@ enum DailyRingRenderer {
         }
         ctx.setLineDash(phase: 0, lengths: [])
 
+        // 渦巻き: 3時間ごとの渦に沿った線
+        if twist != 0 && chrome != .art {
+            ctx.setLineWidth(1)
+            ctx.setStrokeColor(CGColor(red: 0.85, green: 0.9, blue: 1, alpha: 0.07))
+            for h in stride(from: 0, to: 24, by: 3) {
+                for k in 0...30 {
+                    let pt = point(hour: Double(h), radius: rMax * (0.08 + 0.97 * CGFloat(k) / 30), center: center, twist: twist, unit: rMax)
+                    if k == 0 { ctx.move(to: pt) } else { ctx.addLine(to: pt) }
+                }
+                ctx.strokePath()
+            }
+        }
+
         // 時計のような1時間ごとの目盛り（0/6/12/18時は少し長く）
         for hour in 0..<24 {
             let major = hour % 6 == 0
-            let p0 = point(hour: Double(hour), radius: rMax * 1.04, center: center)
-            let p1 = point(hour: Double(hour), radius: rMax * (major ? 1.09 : 1.065), center: center)
+            let p0 = point(hour: Double(hour), radius: rMax * 1.04, center: center, twist: twist, unit: rMax)
+            let p1 = point(hour: Double(hour), radius: rMax * (major ? 1.09 : 1.065), center: center, twist: twist, unit: rMax)
             ctx.setLineWidth(major ? 1.6 : 1.0)
             ctx.setStrokeColor(CGColor(red: 0.85, green: 0.9, blue: 1, alpha: (major ? 0.5 : 0.2) * (chrome == .art ? 0.6 : 1)))
             ctx.move(to: p0)
@@ -260,7 +276,7 @@ enum DailyRingRenderer {
 
     // MARK: - 光のにじみ（星雲のような霞）
 
-    private static func drawHaze(ctx: CGContext, dots: [RingDot], center: CGPoint, rMax: CGFloat, alpha dotAlpha: CGFloat, scale: CGFloat) {
+    private static func drawHaze(ctx: CGContext, dots: [RingDot], center: CGPoint, rMax: CGFloat, alpha dotAlpha: CGFloat, scale: CGFloat, twist: Double) {
         let baseRadius = rMax * CGFloat(DailyRingLayout.dotRadiusFraction) * scale
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -275,7 +291,7 @@ enum DailyRingRenderer {
             n += 1
             if n % 11 != 0 { continue }
             guard let g = gradients[dot.kind] else { continue }
-            let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
+            let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center, twist: twist, unit: rMax)
             let rad = baseRadius * (7 + 6 * CGFloat(dot.depth))
             ctx.drawRadialGradient(g, startCenter: p, startRadius: 0, endCenter: p, endRadius: rad, options: [])
         }
@@ -284,7 +300,7 @@ enum DailyRingRenderer {
 
     // MARK: - 点
 
-    private static func drawDots(ctx: CGContext, dots: [RingDot], center: CGPoint, rMax: CGFloat, alpha dotAlpha: CGFloat, scale: CGFloat) {
+    private static func drawDots(ctx: CGContext, dots: [RingDot], center: CGPoint, rMax: CGFloat, alpha dotAlpha: CGFloat, scale: CGFloat, twist: Double) {
         let baseRadius = rMax * CGFloat(DailyRingLayout.dotRadiusFraction) * scale
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -295,7 +311,7 @@ enum DailyRingRenderer {
             let whiten = 0.04 + 0.34 * pow(dot.depth, 2.4) * dot.brightness
             let c = lighten(base, whiten)
             let alphaScale: CGFloat = ((dot.kind == .stationary || dot.kind == .sleeping) ? 0.5 : 1.0) * dotAlpha
-            let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
+            let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center, twist: twist, unit: rMax)
             let rad = baseRadius * CGFloat(dot.size)
 
             // 大きめの点だけ、やわらかい光のにじみを添える
@@ -316,7 +332,7 @@ enum DailyRingRenderer {
         }
         for dot in dots where dot.role == .bokeh {
             guard let g = gradients[dot.kind] else { continue }
-            let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
+            let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center, twist: twist, unit: rMax)
             let rad = baseRadius * CGFloat(dot.size)
             ctx.saveGState()
             ctx.setAlpha(CGFloat(dot.brightness) * 0.28 * dotAlpha)
@@ -348,9 +364,9 @@ enum DailyRingRenderer {
     }
 
     /// 現在時刻の位置の目印（細い点線と、外周の小さな点）。
-    private static func drawNowMarker(ctx: CGContext, hour: Double, center: CGPoint, rMax: CGFloat, side: CGFloat) {
-        let inner = point(hour: hour, radius: rMax * 0.05, center: center)
-        let outer = point(hour: hour, radius: rMax * 1.04, center: center)
+    private static func drawNowMarker(ctx: CGContext, hour: Double, center: CGPoint, rMax: CGFloat, side: CGFloat, twist: Double) {
+        let outer = point(hour: hour, radius: rMax * 1.04, center: center, twist: twist, unit: rMax)
+        let inner = point(hour: hour, radius: rMax * 0.05, center: center, twist: twist, unit: rMax)
         ctx.saveGState()
         ctx.setLineWidth(1.2)
         ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.42))
@@ -385,10 +401,10 @@ enum DailyRingRenderer {
         string.draw(at: CGPoint(x: x, y: anchor.y - size.height / 2))
     }
 
-    private static func drawLabels(ctx: CGContext, density: DailyRingDensity, date: Date, center: CGPoint, rMax: CGFloat, side: CGFloat, canvas: CGSize, chrome: RingChrome, caption: RingCaption?, style: RingArtStyle, calendar: Calendar) {
+    private static func drawLabels(ctx: CGContext, density: DailyRingDensity, date: Date, center: CGPoint, rMax: CGFloat, side: CGFloat, canvas: CGSize, chrome: RingChrome, caption: RingCaption?, style: RingArtStyle, calendar: Calendar, twist: Double) {
         guard chrome != .art && chrome != .none else { return }
         for hour in [0, 6, 12, 18] {
-            let p = point(hour: Double(hour), radius: rMax * 1.17, center: center)
+            let p = point(hour: Double(hour), radius: rMax * 1.17, center: center, twist: twist, unit: rMax)
             drawText("\(hour)", at: p, fontSize: side * 0.026, weight: .regular, alpha: 0.6)
         }
         guard chrome == .full else { return }
