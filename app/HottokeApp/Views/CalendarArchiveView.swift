@@ -12,7 +12,7 @@ struct CalendarArchiveView: View {
     @StateObject private var thumbnails = ArchiveThumbnailProvider()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
-    @AppStorage(RingTheme.storageKey) private var themeRaw = RingTheme.standard.rawValue
+    @AppStorage(RingArtStyle.storageKey) private var styleRaw = RingArtStyle.defaultStyle.rawValue
 
     private var calendar: Calendar { Calendar.current }
 
@@ -49,7 +49,7 @@ struct CalendarArchiveView: View {
             }
             // 表示中の月の保存済みの日のサムネイルを用意する（保存が増えたときも作り直す）。
             .task(id: thumbnailTaskID) {
-                await thumbnails.load(records: monthRecords, theme: RingTheme.effective(rawValue: themeRaw, proEnabled: proEnabled))
+                await thumbnails.load(records: monthRecords, style: RingArtStyle.effective(rawValue: styleRaw, proEnabled: proEnabled))
             }
             .sheet(item: $selection) { selection in
                 ArchiveDayDetailView(date: selection.date)
@@ -189,7 +189,7 @@ struct CalendarArchiveView: View {
     }
 
     private var thumbnailTaskID: String {
-        "\(DailyRingSlices.dateKey(for: displayedMonth, calendar: calendar))-\(history.revision)-\(themeRaw)-\(proEnabled)"
+        "\(DailyRingSlices.dateKey(for: displayedMonth, calendar: calendar))-\(history.revision)-\(styleRaw)-\(proEnabled)"
     }
 
     /// 保存の状況の説明。1ヶ月の積算は、保存が始まった日から貯まる。

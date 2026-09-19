@@ -9,7 +9,7 @@ struct ArchiveDayDetailView: View {
     @StateObject private var store: DailyRingStore
     @Environment(\.dismiss) private var dismiss
     @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
-    @AppStorage(RingTheme.storageKey) private var themeRaw = RingTheme.standard.rawValue
+    @AppStorage(RingArtStyle.storageKey) private var styleRaw = RingArtStyle.defaultStyle.rawValue
 
     init(date: Date) {
         self.date = date
@@ -27,7 +27,7 @@ struct ArchiveDayDetailView: View {
                     }
                 }
                 .task {
-                    store.configure(proEnabled: proEnabled, themeRaw: themeRaw)
+                    store.configure(proEnabled: proEnabled, styleRaw: styleRaw)
                     await store.refresh()
                 }
         }

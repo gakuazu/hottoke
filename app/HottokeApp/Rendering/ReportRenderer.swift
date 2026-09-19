@@ -9,16 +9,27 @@ enum ReportRenderer {
     static let canvasSize = CGSize(width: 1080, height: 1620)
 
     /// `records`は期間内の保存済みの記録。`scale`を2にすると2倍の解像度で書き出す。
-    static func render(report: PeriodReport, records: [DailyRingSlices], theme: RingTheme, scale: CGFloat = 1) -> UIImage {
+    static func render(report: PeriodReport, records: [DailyRingSlices], style: RingArtStyle = .flowerCorona, scale: CGFloat = 1) -> UIImage {
         let canvas = canvasSize
         let inRange = records.filter { $0.dateKey >= report.startKey && $0.dateKey <= report.endKey && $0.hasAnyData }
-        let density = DailyRingLayout.aggregate(inRange)
+        let sorted = inRange.sorted { $0.dateKey < $1.dateKey }
+        let artStyle = style.forAggregate
+        let density: DailyRingDensity
+        var pastDays: [DailyRingDensity] = []
+        if artStyle == .yearRings, let newest = sorted.last {
+            // 週の年輪: 1日ずつ（新しい日が外側）
+            density = DailyRingLayout.makeDensity(slices: newest)
+            pastDays = sorted.dropLast().reversed().map { DailyRingLayout.makeDensity(slices: $0) }
+        } else {
+            density = DailyRingLayout.aggregate(inRange)
+        }
         let seedDate = date(fromKey: report.startKey) ?? Date()
 
         var options = RingRenderOptions(canvas: canvas)
         options.ringSide = 1040
         options.ringCenter = CGPoint(x: canvas.width / 2, y: 655)
-        options.theme = theme
+        options.style = artStyle
+        options.pastDays = pastDays
         options.chrome = .ringOnly
 
         let format = UIGraphicsImageRendererFormat()
@@ -29,13 +40,13 @@ enum ReportRenderer {
             let ctx = rc.cgContext
             ctx.scaleBy(x: scale, y: scale)
             DailyRingRenderer.draw(in: ctx, density: density, date: seedDate, options: options)
-            drawText(ctx: ctx, report: report, theme: theme, canvas: canvas)
+            drawText(ctx: ctx, report: report, canvas: canvas)
         }
     }
 
     // MARK: - 文字の部分
 
-    private static func drawText(ctx: CGContext, report: PeriodReport, theme: RingTheme, canvas: CGSize) {
+    private static func drawText(ctx: CGContext, report: PeriodReport, canvas: CGSize) {
         let cx = canvas.width / 2
         func text(_ s: String, _ p: CGPoint, _ size: CGFloat, _ weight: UIFont.Weight, _ alpha: CGFloat, _ left: Bool, _ right: Bool) {
             DailyRingRenderer.drawText(s, at: p, fontSize: size, weight: weight, alpha: alpha, leftAligned: left, rightAligned: right)
@@ -66,7 +77,7 @@ enum ReportRenderer {
             let col = i % 2, row = i / 2
             let x: CGFloat = col == 0 ? 150 : 590
             let y = 1372 + CGFloat(row) * 46
-            let c = theme.color(for: kind)
+            let c = DailyRingLayout.ringColor(for: kind)
             ctx.setFillColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: 0.95)
             ctx.fillEllipse(in: CGRect(x: x - 26, y: y - 8, width: 16, height: 16))
             text(kind.displayName, CGPoint(x: x, y: y), 26, .light, 0.75, true, false)

@@ -48,44 +48,22 @@ final class ProModeTests: XCTestCase {
             XCTAssertFalse(feature.summary.isEmpty)
         }
         XCTAssertEqual(ProFeature.allCases.count, 5)
+        XCTAssertTrue(ProFeature.allCases.contains(.artStyles))
     }
 
-    // MARK: - 配色テーマ
+    // MARK: - 活動の色（固定の1セット）
 
-    func testEveryThemeHasSixDistinctKindColorsAndABackground() {
-        XCTAssertGreaterThanOrEqual(RingTheme.allCases.count, 5)
-        for theme in RingTheme.allCases {
-            let kinds = DailyRingLayout.kindOrder
-            for i in 0..<kinds.count {
-                for j in (i + 1)..<kinds.count {
-                    XCTAssertNotEqual(theme.color(for: kinds[i]), theme.color(for: kinds[j]), "\(theme.displayName)で\(kinds[i])と\(kinds[j])が同じ色")
-                }
+    /// 活動ごとの色は、標準の1セットで互いに十分離れている（同色系にならない）。
+    func testKindColorsAreFarApart() {
+        let kinds = DailyRingLayout.kindOrder
+        for i in 0..<kinds.count {
+            for j in (i + 1)..<kinds.count {
+                let d = DailyRingLayout.ringColor(for: kinds[i]).perceptualDistance(to: DailyRingLayout.ringColor(for: kinds[j]))
+                XCTAssertGreaterThanOrEqual(d, 30, "\(kinds[i].displayName)と\(kinds[j].displayName)の色が近い(ΔE=\(d))")
             }
-            let bg = theme.background
-            XCTAssertLessThan(bg.base.r + bg.base.g + bg.base.b, 0.2, "背景は暗い色")
-            XCTAssertFalse(theme.displayName.isEmpty)
         }
-        XCTAssertEqual(RingTheme.standard.color(for: .walking), DailyRingLayout.ringColor(for: .walking))
-        // テーマどうしで色が違う
-        XCTAssertNotEqual(RingTheme.aurora.color(for: .walking), RingTheme.standard.color(for: .walking))
-    }
-
-    /// 活動ごとの色は、どのテーマでも互いに十分離れている（同色系にならない）。
-    func testKindColorsAreFarApartInEveryTheme() {
-        for theme in RingTheme.allCases {
-            let kinds = DailyRingLayout.kindOrder
-            var minDistance = Double.infinity
-            for i in 0..<kinds.count {
-                for j in (i + 1)..<kinds.count {
-                    let d = theme.color(for: kinds[i]).perceptualDistance(to: theme.color(for: kinds[j]))
-                    minDistance = min(minDistance, d)
-                    XCTAssertGreaterThanOrEqual(d, 30, "\(theme.displayName)の\(kinds[i].displayName)と\(kinds[j].displayName)の色が近い(ΔE=\(d))")
-                }
-            }
-            XCTAssertGreaterThanOrEqual(minDistance, 30)
-            // 睡眠は静止より十分に暗い（明度差でも区別できる）
-            XCTAssertGreaterThan(theme.color(for: .stationary).lab.l - theme.color(for: .sleeping).lab.l, 20, "\(theme.displayName)で睡眠が暗くない")
-        }
+        // 睡眠は静止より十分に暗い（明度でも区別できる）
+        XCTAssertGreaterThan(DailyRingLayout.ringColor(for: .stationary).lab.l - DailyRingLayout.ringColor(for: .sleeping).lab.l, 20)
     }
 
     func testPerceptualDistanceBasics() {
@@ -97,10 +75,70 @@ final class ProModeTests: XCTestCase {
         XCTAssertEqual(white.perceptualDistance(to: black), black.perceptualDistance(to: white), accuracy: 1e-9)
     }
 
-    func testThemeIsLockedToStandardWhenProIsOff() {
-        XCTAssertEqual(RingTheme.effective(rawValue: "aurora", proEnabled: true), .aurora)
-        XCTAssertEqual(RingTheme.effective(rawValue: "aurora", proEnabled: false), .standard)
-        XCTAssertEqual(RingTheme.effective(rawValue: "unknown-theme", proEnabled: true), .standard)
+    // MARK: - 表現スタイル
+
+    func testArtStyleDefaultsToFlowerCoronaAndIsLockedWhenProIsOff() {
+        XCTAssertEqual(RingArtStyle.defaultStyle, .flowerCorona)
+        XCTAssertEqual(RingArtStyle.allCases.count, 7)
+        XCTAssertEqual(RingArtStyle.effective(rawValue: "aurora", proEnabled: true), .aurora)
+        XCTAssertEqual(RingArtStyle.effective(rawValue: "aurora", proEnabled: false), .flowerCorona, "ロック中は標準に固定")
+        XCTAssertEqual(RingArtStyle.effective(rawValue: "unknown-style", proEnabled: true), .flowerCorona)
+        XCTAssertEqual(RingArtStyle.effective(rawValue: "classic", proEnabled: true), .classic)
+        for style in RingArtStyle.allCases {
+            XCTAssertFalse(style.displayName.isEmpty)
+            XCTAssertFalse(style.summary.isEmpty)
+            XCTAssertFalse(style.hint.title.isEmpty)
+        }
+        XCTAssertTrue(RingArtStyle.aurora.isRecommendedForWallpaper)
+    }
+
+    func testAggregateFallbackAndPastDayStyles() {
+        XCTAssertEqual(RingArtStyle.spiral.forAggregate, .flowerCorona, "渦巻きは積算に向かないので花のコロナにする")
+        for style in RingArtStyle.allCases where style != .spiral {
+            XCTAssertEqual(style.forAggregate, style)
+        }
+        XCTAssertTrue(RingArtStyle.flowerCorona.usesPastDays)
+        XCTAssertTrue(RingArtStyle.yearRings.usesPastDays)
+        XCTAssertFalse(RingArtStyle.aurora.usesPastDays)
+    }
+
+    // MARK: - 活動のまとまり（エピソード）
+
+    func testEpisodesAreExtractedMergedAndFiltered() {
+        // 朝の歩行30分、3分だけの歩行（捨てる）、昼に歩行20分+5分の中断+10分（結合される）、夕方のランニング40分、乗り物30分
+        let record = dayRecord(12, [
+            (0, 420, .sleeping), (420, 450, .walking), (450, 700, .stationary), (700, 703, .walking), (703, 720, .stationary),
+            (720, 740, .walking), (740, 745, .stationary), (745, 755, .walking), (755, 1080, .stationary),
+            (1080, 1120, .running), (1120, 1200, .stationary), (1200, 1230, .automotive), (1230, 1440, .stationary)
+        ])
+        let density = DailyRingLayout.makeDensity(slices: record)
+        let episodes = DailyRingLayout.episodes(from: density)
+        let walks = episodes.filter { $0.kind == .walking }
+        XCTAssertEqual(walks.count, 2, "5分未満の歩行は捨て、中断の短い歩行は結合する")
+        XCTAssertEqual(walks[0].start, 7, accuracy: 0.01)
+        XCTAssertEqual(walks[0].duration, 0.5, accuracy: 0.01)
+        XCTAssertEqual(walks[1].start, 12, accuracy: 0.01)
+        XCTAssertEqual(walks[1].duration, 35.0 / 60, accuracy: 0.01)
+        let run = episodes.first { $0.kind == .running }
+        XCTAssertNotNil(run)
+        XCTAssertGreaterThan(run!.strength, walks[0].strength, "ランニングのほうが強い")
+        XCTAssertNotNil(episodes.first { $0.kind == .automotive })
+        XCTAssertEqual(episodes.map { $0.start }, episodes.map { $0.start }.sorted())
+        for e in episodes {
+            XCTAssertGreaterThan(e.strength, 0)
+            XCTAssertLessThan(e.strength, 1)
+            XCTAssertLessThanOrEqual(e.end, 24)
+        }
+        // 静止・睡眠だけの日にはエピソードがない
+        XCTAssertTrue(DailyRingLayout.episodes(from: DailyRingLayout.makeDensity(slices: dayRecord(13, [(0, 1440, .stationary)]))).isEmpty)
+    }
+
+    func testEpisodesStopAtCurrentTimeOnPartialDay() {
+        let now = date(19, 9)
+        let record = dayRecord(19, [(0, 400, .sleeping), (400, 560, .walking)], now: now) // 6:40〜9:20だが、9:00で打ち切り
+        let episodes = DailyRingLayout.episodes(from: DailyRingLayout.makeDensity(slices: record))
+        XCTAssertEqual(episodes.count, 1)
+        XCTAssertLessThanOrEqual(episodes[0].end, 9 + 1e-9)
     }
 
     // MARK: - 積算
@@ -193,7 +231,7 @@ final class ProModeTests: XCTestCase {
         let now = date(19, 20)
         let records = (13...18).map { d in dayRecord(d, [(0, 420, .sleeping), (420, 460, .walking), (460, 1440, .stationary)]) }
         let report = PeriodReport.make(records: records, period: .week, now: now, calendar: calendar)
-        let image = ReportRenderer.render(report: report, records: records, theme: .aurora, scale: 0.25)
+        let image = ReportRenderer.render(report: report, records: records, style: .yearRings, scale: 0.25)
         XCTAssertEqual(image.size.width * image.scale, ReportRenderer.canvasSize.width * 0.25, accuracy: 1)
         XCTAssertEqual(image.size.height * image.scale, ReportRenderer.canvasSize.height * 0.25, accuracy: 1)
     }
@@ -212,21 +250,25 @@ final class ProModeTests: XCTestCase {
         XCTAssertFalse(RingExportSize.standard.requiresPro)
         XCTAssertTrue(RingExportSize.high.requiresPro)
         XCTAssertTrue(RingExportSize.wallpaper.requiresPro)
+        XCTAssertTrue(RingExportSize.wallpaperAurora.requiresPro)
+        XCTAssertEqual(RingExportSize.wallpaperAurora.canvas(screenPixels: screen), screen)
+        XCTAssertTrue(RingExportSize.wallpaper.isWallpaper && RingExportSize.wallpaperAurora.isWallpaper && !RingExportSize.high.isWallpaper)
     }
 
-    func testRendererSupportsNonSquareCanvasThemesAndGhost() {
+    func testRendererSupportsNonSquareCanvasStylesAndGhost() {
         let records = (10...12).map { dayRecord($0, [(0, 420, .sleeping), (420, 480, .walking), (480, 1440, .stationary)]) }
         let density = DailyRingLayout.makeDensity(slices: records[0])
-        var options = RingRenderOptions(canvas: CGSize(width: 180, height: 390))
-        options.chrome = .art
-        options.theme = .nightSky
-        options.ghost = DailyRingLayout.aggregate(records)
-        options.ringCenter = CGPoint(x: 90, y: 210)
-        let image = DailyRingRenderer.render(density: density, date: date(10), options: options, calendar: calendar)
-        XCTAssertEqual(image.size.width * image.scale, 180, accuracy: 0.5)
-        XCTAssertEqual(image.size.height * image.scale, 390, accuracy: 0.5)
-        for theme in RingTheme.allCases {
-            let thumb = DailyRingRenderer.renderThumbnail(slices: records[0], size: 60, theme: theme)
+        for style in RingArtStyle.allCases {
+            var options = RingRenderOptions(canvas: CGSize(width: 180, height: 390))
+            options.chrome = .art
+            options.style = style
+            options.ghost = DailyRingLayout.aggregate(records)
+            options.pastDays = records.dropFirst().map { DailyRingLayout.makeDensity(slices: $0) }
+            options.ringCenter = CGPoint(x: 90, y: 210)
+            let image = DailyRingRenderer.render(density: density, date: date(10), options: options, calendar: calendar)
+            XCTAssertEqual(image.size.width * image.scale, 180, accuracy: 0.5, "\(style.displayName)")
+            XCTAssertEqual(image.size.height * image.scale, 390, accuracy: 0.5)
+            let thumb = DailyRingRenderer.renderThumbnail(slices: records[0], size: 60, style: style)
             XCTAssertEqual(thumb.size.width, 60, accuracy: 0.5)
         }
     }

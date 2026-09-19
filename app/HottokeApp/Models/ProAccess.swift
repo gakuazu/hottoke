@@ -10,8 +10,8 @@ enum ProFeature: String, CaseIterable, Identifiable {
     case report
     /// 高解像度・壁紙サイズでの書き出し
     case highQualityExport
-    /// 配色テーマの切り替え
-    case colorThemes
+    /// 表現スタイル（花のコロナ・多重の花・週の年輪・オーロラなど）の切り替え
+    case artStyles
 
     var id: String { rawValue }
 
@@ -21,7 +21,7 @@ enum ProFeature: String, CaseIterable, Identifiable {
         case .comparison: return "今日と普段の比較"
         case .report: return "振り返りレポート"
         case .highQualityExport: return "高解像度・壁紙の書き出し"
-        case .colorThemes: return "配色テーマ"
+        case .artStyles: return "表現スタイルの切り替え"
         }
     }
 
@@ -31,7 +31,7 @@ enum ProFeature: String, CaseIterable, Identifiable {
         case .comparison: return "普段の形を淡い点で背後に重ね、今日との違いを見ます。"
         case .report: return "期間の積算の輪と、合計歩数・活動の時間・最も活発だった日と時間帯を1枚にまとめます。"
         case .highQualityExport: return "2160pxの高解像度、または端末の画面に合わせた壁紙サイズで保存します。"
-        case .colorThemes: return "夜空・オーロラ・夏祭り・月光の配色に切り替えます。"
+        case .artStyles: return "花のコロナ・コロナ・多重の花・週の年輪・オーロラ・渦巻き・従来の点描から、絵の表現を選べます（標準は花のコロナ）。"
         }
     }
 }

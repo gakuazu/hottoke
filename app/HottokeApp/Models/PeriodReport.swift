@@ -89,6 +89,8 @@ enum RingExportSize: String, CaseIterable, Identifiable {
     case standard
     case high
     case wallpaper
+    /// 壁紙のおすすめ表現（オーロラ）で書き出す。
+    case wallpaperAurora
 
     var id: String { rawValue }
 
@@ -97,18 +99,21 @@ enum RingExportSize: String, CaseIterable, Identifiable {
         case .standard: return "標準（1080px）"
         case .high: return "高解像度（2160px）"
         case .wallpaper: return "壁紙（画面の比率）"
+        case .wallpaperAurora: return "壁紙・オーロラ（おすすめ）"
         }
     }
 
     /// プロ機能か（標準は常に使える）。
     var requiresPro: Bool { self != .standard }
 
+    var isWallpaper: Bool { self == .wallpaper || self == .wallpaperAurora }
+
     /// 書き出すキャンバスの大きさ（ピクセル）。`screenPixels`は端末の画面のピクセル数（壁紙のとき使う）。
     func canvas(screenPixels: CGSize) -> CGSize {
         switch self {
         case .standard: return CGSize(width: 1080, height: 1080)
         case .high: return CGSize(width: 2160, height: 2160)
-        case .wallpaper:
+        case .wallpaper, .wallpaperAurora:
             let w = min(screenPixels.width, screenPixels.height)
             let h = max(screenPixels.width, screenPixels.height)
             guard w > 0, h > 0 else { return CGSize(width: 1179, height: 2556) }

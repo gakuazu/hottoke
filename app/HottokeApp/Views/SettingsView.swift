@@ -6,7 +6,7 @@ import CoreMotion
 struct SettingsView: View {
     @State private var motionStatusText: String = "未確認"
     @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
-    @AppStorage(RingTheme.storageKey) private var themeRaw = RingTheme.standard.rawValue
+    @AppStorage(RingArtStyle.storageKey) private var styleRaw = RingArtStyle.defaultStyle.rawValue
 
     var body: some View {
         NavigationStack {
@@ -28,9 +28,9 @@ struct SettingsView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    Picker("配色テーマ", selection: $themeRaw) {
-                        ForEach(RingTheme.allCases) { theme in
-                            Text(theme.displayName).tag(theme.rawValue)
+                    Picker("表現スタイル", selection: $styleRaw) {
+                        ForEach(RingArtStyle.allCases) { style in
+                            Text(style.displayName).tag(style.rawValue)
                         }
                     }
                     .disabled(!proEnabled)

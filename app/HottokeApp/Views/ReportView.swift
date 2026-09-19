@@ -4,7 +4,7 @@ import SwiftUI
 /// 最も活発だった日と時間帯を1枚の画像にまとめ、カメラロールに保存できる。
 struct ReportView: View {
     let proEnabled: Bool
-    let theme: RingTheme
+    let style: RingArtStyle
 
     @Environment(\.dismiss) private var dismiss
     @State private var period: RingPeriod = .week
@@ -96,9 +96,9 @@ struct ReportView: View {
             return
         }
         let report = PeriodReport.make(records: records, period: period, now: now)
-        let theme = self.theme
+        let style = self.style
         image = await Task.detached(priority: .userInitiated) {
-            ReportRenderer.render(report: report, records: records, theme: theme)
+            ReportRenderer.render(report: report, records: records, style: style)
         }.value
     }
 
@@ -108,10 +108,10 @@ struct ReportView: View {
         let records = DailyHistoryStore.shared.recentRecords(days: period.days, endingAt: now)
         guard !records.isEmpty else { return }
         let report = PeriodReport.make(records: records, period: period, now: now)
-        let theme = self.theme
+        let style = self.style
         let scale: CGFloat = ProAccess.isUnlocked(.highQualityExport, enabled: proEnabled) ? 2 : 1
         let high = await Task.detached(priority: .userInitiated) {
-            ReportRenderer.render(report: report, records: records, theme: theme, scale: scale)
+            ReportRenderer.render(report: report, records: records, style: style, scale: scale)
         }.value
         do {
             try await PhotoLibrarySaver.saveImage(high)

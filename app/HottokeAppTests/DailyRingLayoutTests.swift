@@ -458,40 +458,61 @@ final class DailyRingLayoutTests: XCTestCase {
             try image.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent(name))
         }
 
-        // 積算（1週間・1ヶ月）
-        for (name, records, title) in [("ring-week-aggregate.png", weekRecords, "1週間の積算"), ("ring-month-aggregate.png", monthRecords, "1ヶ月の積算")] {
-            var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
-            options.caption = RingCaption(title: title, subtitle: "保存済み \(records.count)日分")
-            try writePNG(DailyRingRenderer.render(density: DailyRingLayout.aggregate(records), date: base, options: options, calendar: calendar), name)
-        }
-
-        // 今日と普段の重ね
-        var compareOptions = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
-        compareOptions.ghost = DailyRingLayout.aggregate(pastRecords)
+        let past6 = Array(pastRecords.suffix(6)).reversed().map { DailyRingLayout.makeDensity(slices: $0) } // 新しい順
+        let typicalRecord = DailyRingLayout.makeSlices(data: typicalDay(day: 18), now: now, calendar: calendar)
+        let typicalDensity = DailyRingLayout.makeDensity(slices: typicalRecord)
         let todayDensity = DailyRingLayout.makeDensity(slices: todayRecord)
-        try writePNG(DailyRingRenderer.render(density: todayDensity, date: base, options: compareOptions, calendar: calendar), "ring-compare-today.png")
 
-        // 振り返りレポート（1週間・1ヶ月）
-        for (name, records, period) in [("report-week.png", weekRecords, RingPeriod.week), ("report-month.png", monthRecords, RingPeriod.month)] {
-            let report = PeriodReport.make(records: records, period: period, now: now, calendar: calendar)
-            try writePNG(ReportRenderer.render(report: report, records: records, theme: .standard), name)
-        }
-        let weekReport = PeriodReport.make(records: weekRecords, period: .week, now: now, calendar: calendar)
-        try writePNG(ReportRenderer.render(report: weekReport, records: weekRecords, theme: .aurora), "report-week-aurora.png")
-
-        // 壁紙サイズ（iPhoneの画面の比率）
-        var wallpaper = RingRenderOptions(canvas: CGSize(width: 1179, height: 2556))
-        wallpaper.chrome = .art
-        wallpaper.ringSide = 1179 * 1.35
-        wallpaper.ringCenter = CGPoint(x: 1179 / 2, y: 2556 * 0.54)
-        try writePNG(DailyRingRenderer.render(density: DailyRingLayout.aggregate(weekRecords), date: base, options: wallpaper, calendar: calendar), "ring-wallpaper-week.png")
-
-        // 各配色テーマ（普通の日）
-        for theme in RingTheme.allCases {
+        // 表現スタイルごと（普通の日 + 過去6日を重ねる）
+        for style in RingArtStyle.allCases {
             var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
-            options.theme = theme
-            let density = DailyRingLayout.makeDensity(slices: DailyRingLayout.makeSlices(data: typicalDay(day: 18), now: now, calendar: calendar))
-            try writePNG(DailyRingRenderer.render(density: density, date: date(2026, 9, 18), options: options, calendar: calendar), "ring-theme-\(theme.rawValue).png")
+            options.style = style
+            options.pastDays = style.usesPastDays ? past6 : []
+            try writePNG(DailyRingRenderer.render(density: typicalDensity, date: date(2026, 9, 18), options: options, calendar: calendar), "ring-style-\(style.rawValue).png")
+        }
+        // 今日の途中（14:20まで）: 花のコロナ・週の年輪・オーロラ
+        for style in [RingArtStyle.flowerCorona, .yearRings, .aurora, .multiFlower] {
+            var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+            options.style = style
+            options.pastDays = style.usesPastDays ? past6 : []
+            try writePNG(DailyRingRenderer.render(density: todayDensity, date: base, options: options, calendar: calendar), "ring-today-\(style.rawValue).png")
+        }
+        // 積算（1週間・1ヶ月）: 花のコロナ・週の年輪
+        for style in [RingArtStyle.flowerCorona, .yearRings] {
+            for (name, records, title) in [("week", weekRecords, "1週間の積算"), ("month", monthRecords, "1ヶ月の積算")] {
+                var options = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+                options.style = style
+                options.caption = RingCaption(title: title, subtitle: "保存済み \(records.count)日分")
+                var density = DailyRingLayout.aggregate(records)
+                if style == .yearRings, let newest = records.last {
+                    density = DailyRingLayout.makeDensity(slices: newest)
+                    options.pastDays = records.dropLast().reversed().map { DailyRingLayout.makeDensity(slices: $0) }
+                }
+                try writePNG(DailyRingRenderer.render(density: density, date: base, options: options, calendar: calendar), "ring-\(name)-\(style.rawValue).png")
+            }
+        }
+
+        // 従来の点描の山: 今日と普段の重ね
+        var compareOptions = RingRenderOptions(canvas: CGSize(width: 1080, height: 1080))
+        compareOptions.style = .classic
+        compareOptions.ghost = DailyRingLayout.aggregate(pastRecords)
+        try writePNG(DailyRingRenderer.render(density: todayDensity, date: base, options: compareOptions, calendar: calendar), "ring-compare-classic.png")
+
+        // 振り返りレポート（1週間・1ヶ月、週の年輪の週）
+        for (name, records, period, style) in [("report-week.png", weekRecords, RingPeriod.week, RingArtStyle.flowerCorona), ("report-month.png", monthRecords, RingPeriod.month, RingArtStyle.flowerCorona), ("report-week-yearRings.png", weekRecords, RingPeriod.week, RingArtStyle.yearRings)] {
+            let report = PeriodReport.make(records: records, period: period, now: now, calendar: calendar)
+            try writePNG(ReportRenderer.render(report: report, records: records, style: style), name)
+        }
+
+        // 壁紙サイズ（iPhoneの画面の比率）: オーロラ（おすすめ）と花のコロナ
+        for style in [RingArtStyle.aurora, .flowerCorona] {
+            var wallpaper = RingRenderOptions(canvas: CGSize(width: 1179, height: 2556))
+            wallpaper.style = style
+            wallpaper.chrome = .art
+            wallpaper.ringSide = 1179 * 1.35
+            wallpaper.ringCenter = CGPoint(x: 1179 / 2, y: 2556 * 0.54)
+            wallpaper.pastDays = style.usesPastDays ? past6 : []
+            try writePNG(DailyRingRenderer.render(density: typicalDensity, date: date(2026, 9, 18), options: wallpaper, calendar: calendar), "ring-wallpaper-\(style.rawValue).png")
         }
 
         // アーカイブのサムネイル（拡大して確認）

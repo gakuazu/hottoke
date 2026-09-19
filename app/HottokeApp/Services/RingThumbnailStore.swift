@@ -15,28 +15,28 @@ final class RingThumbnailStore {
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
     }
 
-    private func fileName(themeKey: String, slices: DailyRingSlices) -> String {
-        "\(themeKey)-\(slices.dateKey)-\(slices.signature).png"
+    private func fileName(styleKey: String, slices: DailyRingSlices) -> String {
+        "\(styleKey)-\(slices.dateKey)-\(slices.signature).png"
     }
 
     /// キャッシュがあれば返し、なければ描いて保存して返す。同じ日・テーマの古いキャッシュは消す。
     /// 描画に時間がかかるので、バックグラウンドで呼ぶこと。
-    func thumbnail(themeKey: String, slices: DailyRingSlices, theme: RingTheme = .standard) -> UIImage {
-        let name = fileName(themeKey: themeKey, slices: slices)
+    func thumbnail(styleKey: String, slices: DailyRingSlices, style: RingArtStyle = .flowerCorona) -> UIImage {
+        let name = fileName(styleKey: styleKey, slices: slices)
         let url = directory.appendingPathComponent(name)
         if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
             return image
         }
-        let image = DailyRingRenderer.renderThumbnail(slices: slices, size: Self.thumbnailSize, theme: theme)
-        removeOldCaches(themeKey: themeKey, dateKey: slices.dateKey)
+        let image = DailyRingRenderer.renderThumbnail(slices: slices, size: Self.thumbnailSize, style: style)
+        removeOldCaches(styleKey: styleKey, dateKey: slices.dateKey)
         if let data = image.pngData() {
             try? data.write(to: url, options: .atomic)
         }
         return image
     }
 
-    private func removeOldCaches(themeKey: String, dateKey: String) {
-        let prefix = "\(themeKey)-\(dateKey)-"
+    private func removeOldCaches(styleKey: String, dateKey: String) {
+        let prefix = "\(styleKey)-\(dateKey)-"
         let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         for file in files where file.hasPrefix(prefix) {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent(file))
@@ -51,13 +51,13 @@ final class ArchiveThumbnailProvider: ObservableObject {
     private var signatures: [String: String] = [:]
 
     /// 指定の記録のサムネイルを用意する（すでに同じ内容のものがあれば何もしない）。
-    func load(records: [DailyRingSlices], theme: RingTheme) async {
-        let todo = records.filter { signatures[$0.dateKey] != "\(theme.rawValue)|\($0.signature)" && $0.hasAnyData }
+    func load(records: [DailyRingSlices], style: RingArtStyle) async {
+        let todo = records.filter { signatures[$0.dateKey] != "\(style.rawValue)|\($0.signature)" && $0.hasAnyData }
         guard !todo.isEmpty else { return }
         let results = await Task.detached(priority: .utility) { () -> [(String, String, UIImage)] in
             todo.map { record in
-                let image = RingThumbnailStore.shared.thumbnail(themeKey: theme.rawValue, slices: record, theme: theme)
-                return (record.dateKey, "\(theme.rawValue)|\(record.signature)", image)
+                let image = RingThumbnailStore.shared.thumbnail(styleKey: style.rawValue, slices: record, style: style)
+                return (record.dateKey, "\(style.rawValue)|\(record.signature)", image)
             }
         }.value
         for (key, signature, image) in results {
