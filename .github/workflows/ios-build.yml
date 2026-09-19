@@ -56,12 +56,24 @@ jobs:
           echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
 
       - name: Run unit tests on Simulator
+        env:
+          # 「1日の輪」のサンプル画像を書き出す先（目視確認用。TEST_RUNNER_ 接頭辞の環境変数はテストプロセスに渡される）
+          TEST_RUNNER_RING_SAMPLE_DIR: ${{ github.workspace }}/app/ring-samples
         run: |
           xcodebuild test \
             -project HottokeApp.xcodeproj \
             -scheme HottokeApp \
             -destination "platform=iOS Simulator,name=${{ steps.pick_sim.outputs.device }}" \
             CODE_SIGNING_ALLOWED=NO
+
+      - name: Upload ring sample images (visual check)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ring-sample-images
+          path: app/ring-samples
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build unsigned .app for iOS device (for Sideloadly)
         run: |

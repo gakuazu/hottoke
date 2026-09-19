@@ -342,4 +342,26 @@ final class DailyRingLayoutTests: XCTestCase {
         let todayImage = DailyRingRenderer.render(profile: todayProfile, date: now, size: 160, calendar: calendar)
         XCTAssertEqual(todayImage.size.width * todayImage.scale, 160, accuracy: 0.5)
     }
+
+    /// 見た目の確認用: 環境変数 RING_SAMPLE_DIR が指定されているときだけ、サンプル画像(1080px)をPNGで書き出す
+    /// （GitHub Actionsで画像をArtifactとして受け取り、目視確認するため。通常のテストでは何もしない）。
+    func testWriteSampleImagesWhenRequested() throws {
+        guard let dir = ProcessInfo.processInfo.environment["RING_SAMPLE_DIR"], !dir.isEmpty else { return }
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        let past = sampleProfile()
+        let pastImage = DailyRingRenderer.render(profile: past, date: date(2026, 9, 18), size: 1080, calendar: calendar)
+        try pastImage.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("ring-past-full-day.png"))
+
+        let now = date(2026, 9, 19, 14, 20)
+        let hourly = [0, 0, 0, 0, 0, 0, 150, 3200, 4300, 600, 0, 0, 1800, 900, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        let segments = [
+            ActivitySegment(start: date(2026, 9, 19, 7), end: date(2026, 9, 19, 9), kind: .walking),
+            ActivitySegment(start: date(2026, 9, 19, 9), end: date(2026, 9, 19, 9, 45), kind: .automotive),
+            ActivitySegment(start: date(2026, 9, 19, 12), end: date(2026, 9, 19, 13), kind: .running)
+        ]
+        let today = DailyRingLayout.makeProfile(data: makeData(day: now, hourlySteps: hourly, segments: segments), now: now, calendar: calendar)
+        let todayImage = DailyRingRenderer.render(profile: today, date: now, size: 1080, calendar: calendar)
+        try todayImage.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("ring-today-partial.png"))
+    }
 }
