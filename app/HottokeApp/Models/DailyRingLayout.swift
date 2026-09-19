@@ -103,8 +103,8 @@ enum DailyRingLayout {
     /// 活動ごとの色（暗い背景で光って見える色）。
     static func ringColor(for kind: ActivityKind) -> RingRGB {
         switch ringKind(for: kind) {
-        case .stationary: return rgb(hex: "#6f86ff") // 青
-        case .automotive: return rgb(hex: "#c08cff") // 紫
+        case .stationary: return rgb(hex: "#5b79ff") // 青
+        case .automotive: return rgb(hex: "#d27cff") // 紫
         case .cycling: return rgb(hex: "#ffb43e")    // 琥珀
         case .walking: return rgb(hex: "#4fe8b0")    // ミント
         default: return rgb(hex: "#ff5f8a")          // 走行: ピンク赤
