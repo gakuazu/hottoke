@@ -22,8 +22,8 @@ final class DailyRingStore: ObservableObject {
         let now = Date()
         let data = await service.fetch(for: now, includeHourlySteps: true)
         let rendered = await Task.detached(priority: .userInitiated) { () -> UIImage in
-            let profile = DailyRingLayout.makeProfile(data: data, now: now)
-            return DailyRingRenderer.render(profile: profile, date: data.date)
+            let density = DailyRingLayout.makeDensity(data: data, now: now)
+            return DailyRingRenderer.render(density: density, date: data.date)
         }.value
 
         image = rendered
@@ -165,23 +165,24 @@ struct DailyRingView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("この輪の読み方")
                 .font(.subheadline.bold())
-            legendLine(icon: "clock", text: "ぐるっと一周が24時間です。真上が0時、右が6時、真下が12時、左が18時。今日は現在時刻までを描き、これからの時間は空白です（点線が今の時刻）。")
-            legendLine(icon: "arrow.up.left.and.arrow.down.right", text: "中心から遠いほど、その時間に活動した量（歩数）が多いです。うっすらした円は、内側から1時間あたり500歩・1500歩・3000歩の目安。静かな時間も中心の近くに小さく残ります。")
-            legendLine(icon: "paintpalette", text: "色は時間帯にそって朝から夜へ移り変わります。")
+            legendLine(icon: "clock", text: "ぐるっと一周が24時間です。真上が0時、右が6時、真下が12時、左が18時。今日は現在時刻までを描き、これからの時間は空のまま残ります（点線が今の時刻）。")
+            legendLine(icon: "circle.dotted", text: "輪は活動の種類ごとに決まっています。その時刻にその活動をしていた時間が長いほど、輪の上の点が多く、びっしり並びます。歩行・走行は歩数が多いほど濃くなります。")
 
-            Text("模様の種類 = 活動")
+            Text("外側の輪から順に")
                 .font(.footnote.bold())
                 .padding(.top, 4)
-            ForEach(Self.legendKinds, id: \.self) { kind in
+            ForEach(DailyRingLayout.ringOrder, id: \.self) { kind in
+                let c = DailyRingLayout.ringColor(for: kind)
                 HStack(spacing: 8) {
-                    Image(systemName: DailyRingLayout.patternStyle(for: kind).iconName)
+                    Circle()
+                        .fill(Color(red: c.r, green: c.g, blue: c.b))
+                        .frame(width: 12, height: 12)
                         .frame(width: 22)
-                        .foregroundStyle(.secondary)
-                    Text("\(kind.displayName): \(DailyRingLayout.patternStyle(for: kind).displayName)")
+                    Text(kind.displayName)
                         .font(.footnote)
                 }
             }
-            Text("自転車・車移動は歩数が出ないため、乗っていた時間から歩数に換算して半径を決めています。活動の切り替わり目は、形も半径もなめらかにつながります。")
+            Text("静止（睡眠など長い時間）は一番外側の広い輪に背景のように広がります。点の数は5分ごとに数え、前後20分でなめらかにつないでいます。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -189,8 +190,6 @@ struct DailyRingView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 16).fill(Color.secondary.opacity(0.10)))
     }
-
-    private static let legendKinds: [ActivityKind] = [.stationary, .walking, .running, .cycling, .automotive]
 
     private func legendLine(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {

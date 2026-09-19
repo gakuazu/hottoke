@@ -1,7 +1,7 @@
 import XCTest
 @testable import HottokeApp
 
-/// 「1日の輪」の角度・半径・描画範囲・連続性のテスト（docs/22-app1-radial-redesign.md）。
+/// 「1日の輪」（点描リング）の角度・輪・点の数・描画範囲・連続性のテスト（docs/22-app1-radial-redesign.md）。
 final class DailyRingLayoutTests: XCTestCase {
 
     private var calendar: Calendar {
@@ -14,8 +14,7 @@ final class DailyRingLayoutTests: XCTestCase {
         calendar.date(from: DateComponents(year: y, month: m, day: d, hour: h, minute: min))!
     }
 
-    /// テスト用データ: 各時間の歩数と、必要なら活動区間を指定して1日分のデータを作る。
-    private func makeData(day: Date, hourlySteps: [Int], segments: [ActivitySegment] = []) -> DailyActivityData {
+    private func makeData(day: Date, hourlySteps: [Int] = Array(repeating: 0, count: 24), segments: [ActivitySegment] = []) -> DailyActivityData {
         DailyActivityData(
             date: calendar.startOfDay(for: day),
             segments: segments,
@@ -33,21 +32,22 @@ final class DailyRingLayoutTests: XCTestCase {
         return result
     }
 
+    private func seg(_ day: Int, _ h0: Int, _ m0: Int, _ h1: Int, _ m1: Int, _ kind: ActivityKind) -> ActivitySegment {
+        ActivitySegment(start: date(2026, 9, day, h0, m0), end: date(2026, 9, day, h1, m1), kind: kind)
+    }
+
     // MARK: - 角度
 
     func testAngleZeroIsTopAndClockwise() {
         let top = DailyRingLayout.unitVector(forHour: 0)
         XCTAssertEqual(top.dx, 0, accuracy: 1e-9)
         XCTAssertEqual(top.dy, -1, accuracy: 1e-9) // 画面座標では上が-y
-
         let right = DailyRingLayout.unitVector(forHour: 6)
         XCTAssertEqual(right.dx, 1, accuracy: 1e-9)
         XCTAssertEqual(right.dy, 0, accuracy: 1e-9)
-
         let bottom = DailyRingLayout.unitVector(forHour: 12)
         XCTAssertEqual(bottom.dx, 0, accuracy: 1e-9)
         XCTAssertEqual(bottom.dy, 1, accuracy: 1e-9)
-
         let left = DailyRingLayout.unitVector(forHour: 18)
         XCTAssertEqual(left.dx, -1, accuracy: 1e-9)
         XCTAssertEqual(left.dy, 0, accuracy: 1e-9)
@@ -60,50 +60,33 @@ final class DailyRingLayoutTests: XCTestCase {
         XCTAssertEqual(DailyRingLayout.angleDegrees(forHour: 24), 360, accuracy: 1e-9)
     }
 
-    // MARK: - 半径
+    // MARK: - 輪の割り当て
 
-    func testRadiusFractionIsMonotonicAndHasMinimum() {
-        XCTAssertEqual(DailyRingLayout.radiusFraction(forEffectiveSteps: 0), DailyRingLayout.minRadiusFraction, accuracy: 1e-12)
-        XCTAssertGreaterThan(DailyRingLayout.radiusFraction(forEffectiveSteps: 0), 0)
-
-        var previous = DailyRingLayout.radiusFraction(forEffectiveSteps: 0)
-        for s in stride(from: 100, through: 10_000, by: 100) {
-            let value = DailyRingLayout.radiusFraction(forEffectiveSteps: Double(s))
-            XCTAssertGreaterThan(value, previous, "歩数\(s)で半径が増えていない")
-            XCTAssertLessThan(value, 1)
-            previous = value
+    func testRingsAreOrderedOuterToInnerWithoutOverlapAndLeaveCenterOpen() {
+        XCTAssertEqual(DailyRingLayout.ringOrder, [.stationary, .automotive, .cycling, .walking, .running])
+        var previousInner = Double.infinity
+        for kind in DailyRingLayout.ringOrder {
+            let band = DailyRingLayout.band(for: kind)
+            XCTAssertLessThan(band.inner, band.outer)
+            XCTAssertLessThanOrEqual(band.outer, previousInner, "\(kind)の輪が外側の輪と重なっている")
+            XCTAssertGreaterThan(band.inner, 0.1, "中心は空ける")
+            previousInner = band.inner
         }
+        XCTAssertLessThanOrEqual(DailyRingLayout.band(for: .stationary).outer, 1.0)
+        // 静止は最も広い帯
+        let widths = DailyRingLayout.ringOrder.map { DailyRingLayout.band(for: $0).outer - DailyRingLayout.band(for: $0).inner }
+        XCTAssertEqual(widths.max(), widths[0])
+        // 不明は静止の輪に含める
+        XCTAssertEqual(DailyRingLayout.band(for: .unknown), DailyRingLayout.band(for: .stationary))
     }
 
-    func testEffectiveStepsCompensatesCyclingAndAutomotive() {
-        // 歩数0でも、自転車30分・車移動30分なら静止(最小半径)より大きい活動量になる。
-        let cycling = DailyRingLayout.effectiveSteps(steps: 0, secondsByKind: [.cycling: 1800])
-        let car = DailyRingLayout.effectiveSteps(steps: 0, secondsByKind: [.automotive: 1800])
-        XCTAssertEqual(cycling, 2700, accuracy: 1e-9)
-        XCTAssertEqual(car, 900, accuracy: 1e-9)
-        XCTAssertGreaterThan(cycling, car)
-        // 歩数のほうが大きければ歩数を優先
-        XCTAssertEqual(DailyRingLayout.effectiveSteps(steps: 4000, secondsByKind: [.automotive: 600]), 4000, accuracy: 1e-9)
-    }
-
-    // MARK: - 活動種別
-
-    func testDominantKindRules() {
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [:], steps: 0), .stationary)
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [.stationary: 3000], steps: 100), .stationary)
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [.walking: 1200, .stationary: 2000], steps: 1500), .walking)
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [.automotive: 1800], steps: 0), .automotive)
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [.cycling: 2400, .walking: 300], steps: 200), .cycling)
-        // 活動区間の検出漏れ: 区間は静止だが歩数が多い → 歩行
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [.stationary: 3600], steps: 2500), .walking)
-        // 移動が5分未満で歩数も少ない → 静止
-        XCTAssertEqual(DailyRingLayout.dominantKind(secondsByKind: [.walking: 120], steps: 100), .stationary)
-    }
-
-    func testPatternStylesAreDistinctPerKind() {
-        let kinds: [ActivityKind] = [.stationary, .walking, .running, .cycling, .automotive]
-        let styles = Set(kinds.map { DailyRingLayout.patternStyle(for: $0) })
-        XCTAssertEqual(styles.count, kinds.count, "輪の上で見分けられるよう、5つの活動は別々の形にする")
+    func testRingColorsAreDistinct() {
+        let colors = DailyRingLayout.ringOrder.map { DailyRingLayout.ringColor(for: $0) }
+        for i in 0..<colors.count {
+            for j in (i + 1)..<colors.count {
+                XCTAssertNotEqual(colors[i], colors[j])
+            }
+        }
     }
 
     // MARK: - 描画範囲（今日の途中 / 過去日）
@@ -114,232 +97,195 @@ final class DailyRingLayoutTests: XCTestCase {
         XCTAssertEqual(drawn, 9, accuracy: 1e-9)
         XCTAssertEqual(DailyRingLayout.sweepDegrees(forDrawnHours: drawn), 135, accuracy: 1e-9)
 
-        let data = makeData(day: now, hourlySteps: steps([7: 800, 8: 2500]))
-        let profile = DailyRingLayout.makeProfile(data: data, now: now, calendar: calendar)
-        XCTAssertEqual(profile.slots.count, 9) // 0時台〜8時台
-        XCTAssertTrue(profile.isPartialDay)
-        XCTAssertFalse(profile.isPeriodic)
-        XCTAssertEqual(profile.drawnHours, 9, accuracy: 1e-9)
-
-        // 9時以降は描かれない（種別の重みが空）。9時より前は描かれる。
-        XCTAssertTrue(profile.kindWeights(at: 9.5).isEmpty)
-        XCTAssertTrue(profile.kindWeights(at: 15).isEmpty)
-        XCTAssertTrue(profile.kindWeights(at: 23.9).isEmpty)
-        XCTAssertFalse(profile.kindWeights(at: 8.5).isEmpty)
-        XCTAssertFalse(profile.kindWeights(at: 0.1).isEmpty)
+        let density = DailyRingLayout.makeDensity(data: makeData(day: now, segments: [seg(19, 0, 0, 8, 0, .stationary), seg(19, 8, 0, 9, 0, .walking)]), now: now, calendar: calendar)
+        XCTAssertTrue(density.isPartialDay)
+        XCTAssertFalse(density.isPeriodic)
+        XCTAssertEqual(density.sliceCount, 108) // 9時間 × 12スライス
     }
 
-    func testTodayWithinAnHourIncludesPartialSlot() {
-        let now = date(2026, 9, 19, 9, 30)
-        let data = makeData(day: now, hourlySteps: steps([9: 1200]))
-        let profile = DailyRingLayout.makeProfile(data: data, now: now, calendar: calendar)
-        XCTAssertEqual(profile.drawnHours, 9.5, accuracy: 1e-9)
-        XCTAssertEqual(profile.slots.count, 10)
-        XCTAssertEqual(profile.slots.last?.coverage ?? 0, 0.5, accuracy: 1e-9)
-        XCTAssertEqual(DailyRingLayout.sweepDegrees(forDrawnHours: profile.drawnHours), 142.5, accuracy: 1e-9)
+    func testNoDotsBeyondCurrentTime() {
+        // 今日の9:20。0時から現在までずっと静止、8時台は歩行。
+        let now = date(2026, 9, 19, 9, 20)
+        let data = makeData(day: now, hourlySteps: steps([8: 3000]), segments: [seg(19, 0, 0, 8, 0, .stationary), seg(19, 8, 0, 9, 20, .walking)])
+        let density = DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar)
+        XCTAssertEqual(density.drawnHours, 9 + 20.0 / 60, accuracy: 1e-9)
+        let dots = DailyRingLayout.makeDots(density: density, seed: 20260919)
+        XCTAssertFalse(dots.isEmpty)
+        for dot in dots {
+            XCTAssertLessThanOrEqual(dot.hour, density.drawnHours + 1e-9, "現在時刻より先に点がある")
+            XCTAssertGreaterThanOrEqual(dot.hour, 0)
+        }
     }
 
     func testPastDayDrawsFull360Degrees() {
         let now = date(2026, 9, 19, 9, 0)
         let yesterday = date(2026, 9, 18)
-        let drawn = DailyRingLayout.drawnHours(forDayStarting: yesterday, now: now, calendar: calendar)
-        XCTAssertEqual(drawn, 24, accuracy: 1e-9)
-        XCTAssertEqual(DailyRingLayout.sweepDegrees(forDrawnHours: drawn), 360, accuracy: 1e-9)
-
-        let profile = DailyRingLayout.makeProfile(data: makeData(day: yesterday, hourlySteps: Array(repeating: 500, count: 24)), now: now, calendar: calendar)
-        XCTAssertEqual(profile.slots.count, 24)
-        XCTAssertTrue(profile.isPeriodic)
-        XCTAssertFalse(profile.isPartialDay)
-        XCTAssertFalse(profile.kindWeights(at: 23.9).isEmpty)
+        XCTAssertEqual(DailyRingLayout.drawnHours(forDayStarting: yesterday, now: now, calendar: calendar), 24, accuracy: 1e-9)
+        let density = DailyRingLayout.makeDensity(data: makeData(day: yesterday, segments: [seg(18, 0, 0, 23, 59, .stationary)]), now: now, calendar: calendar)
+        XCTAssertEqual(density.sliceCount, 288)
+        XCTAssertTrue(density.isPeriodic)
+        XCTAssertFalse(density.isPartialDay)
+        let dots = DailyRingLayout.makeDots(density: density, seed: 1)
+        // 24時間ぶんのどこにも点がある（0〜6時、18〜24時にも）
+        XCTAssertTrue(dots.contains { $0.hour < 1 })
+        XCTAssertTrue(dots.contains { $0.hour > 23 })
     }
 
     func testFutureDayDrawsNothing() {
         let now = date(2026, 9, 19, 9, 0)
-        let drawn = DailyRingLayout.drawnHours(forDayStarting: date(2026, 9, 20), now: now, calendar: calendar)
-        XCTAssertEqual(drawn, 0, accuracy: 1e-9)
+        let density = DailyRingLayout.makeDensity(data: makeData(day: date(2026, 9, 20)), now: now, calendar: calendar)
+        XCTAssertEqual(density.drawnHours, 0, accuracy: 1e-9)
+        XCTAssertEqual(density.sliceCount, 0)
+        XCTAssertTrue(DailyRingLayout.makeDots(density: density, seed: 1).isEmpty)
     }
 
-    func testSegmentsAreSplitPerHour() {
+    // MARK: - 点の数（分数に比例）・輪の中に収まる
+
+    func testDotsStayInsideTheirRingBand() {
         let now = date(2026, 9, 19, 12, 0)
-        // 7:30〜8:30 歩行 → 7時台30分・8時台30分
-        let segment = ActivitySegment(start: date(2026, 9, 19, 7, 30), end: date(2026, 9, 19, 8, 30), kind: .walking)
-        let data = makeData(day: now, hourlySteps: steps([7: 1500, 8: 1500]), segments: [segment])
-        let slots = DailyRingLayout.makeSlots(data: data, now: now, calendar: calendar)
-        XCTAssertEqual(slots[7].secondsByKind[.walking] ?? 0, 1800, accuracy: 1)
-        XCTAssertEqual(slots[8].secondsByKind[.walking] ?? 0, 1800, accuracy: 1)
-        XCTAssertEqual(slots[7].kind, .walking)
-        XCTAssertEqual(slots[6].kind, .stationary)
-        XCTAssertGreaterThan(slots[7].radiusFraction, slots[6].radiusFraction)
-    }
-
-    // MARK: - 連続性: 半径
-
-    private func sampleProfile() -> DailyRingProfile {
-        // 静か→歩く→走る→車→静か…と極端に変化する1日（過去日として24時間）。
-        let hourly = [0, 0, 0, 0, 0, 0, 200, 3500, 4200, 300, 0, 0, 1500, 800, 0, 0, 0, 6000, 2500, 0, 0, 0, 0, 0]
-        let segments = [
-            ActivitySegment(start: date(2026, 9, 18, 7), end: date(2026, 9, 18, 9), kind: .walking),
-            ActivitySegment(start: date(2026, 9, 18, 9), end: date(2026, 9, 18, 9, 40), kind: .automotive),
-            ActivitySegment(start: date(2026, 9, 18, 17), end: date(2026, 9, 18, 18), kind: .running),
-            ActivitySegment(start: date(2026, 9, 18, 18), end: date(2026, 9, 18, 19), kind: .cycling)
-        ]
-        let data = makeData(day: date(2026, 9, 18), hourlySteps: hourly, segments: segments)
-        return DailyRingLayout.makeProfile(data: data, now: date(2026, 9, 19, 9), calendar: calendar)
-    }
-
-    func testRadiusCurvePassesThroughHourValuesAndNeverOvershoots() {
-        let profile = sampleProfile()
-        XCTAssertTrue(profile.isPeriodic)
-        let values = profile.slots.map { $0.radiusFraction }
-        let lo = values.min()!, hi = values.max()!
-        for slot in profile.slots {
-            XCTAssertEqual(profile.radiusFraction(at: Double(slot.hour) + 0.5), slot.radiusFraction, accuracy: 1e-9)
-        }
-        var t = 0.0
-        while t < 24 {
-            let r = profile.radiusFraction(at: t)
-            XCTAssertGreaterThanOrEqual(r, lo - 1e-9)
-            XCTAssertLessThanOrEqual(r, hi + 1e-9)
-            XCTAssertGreaterThanOrEqual(r, DailyRingLayout.minRadiusFraction - 1e-9)
-            t += 0.01
+        let data = makeData(day: now, hourlySteps: steps([9: 4000, 10: 3000]), segments: [
+            seg(19, 0, 0, 9, 0, .stationary), seg(19, 9, 0, 10, 0, .walking), seg(19, 10, 0, 10, 30, .running),
+            seg(19, 10, 30, 11, 0, .cycling), seg(19, 11, 0, 12, 0, .automotive)
+        ])
+        let dots = DailyRingLayout.makeDots(density: DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar), seed: 7)
+        XCTAssertEqual(Set(dots.map { $0.kind }).count, 5)
+        for dot in dots {
+            let band = DailyRingLayout.band(for: dot.kind)
+            XCTAssertGreaterThanOrEqual(dot.radius, band.inner - 1e-9)
+            XCTAssertLessThanOrEqual(dot.radius, band.outer + 1e-9)
         }
     }
 
-    func testRadiusCurveIsContinuousWithoutSteps() {
-        let profile = sampleProfile()
-        var t = 0.0
-        var previous = profile.radiusFraction(at: 0)
+    func testDotCountIsProportionalToMinutes() {
+        // 60分ずっと歩いた日と、30分だけ歩いた日（歩数は同じペースで、濃さの補正が同じになるようにする）。
+        let now = date(2026, 9, 19, 23, 30)
+        let long = makeData(day: now, hourlySteps: steps([10: 6000]), segments: [seg(19, 10, 0, 11, 0, .walking)])
+        let short = makeData(day: now, hourlySteps: steps([14: 3000]), segments: [seg(19, 14, 0, 14, 30, .walking)])
+        let longDensity = DailyRingLayout.makeDensity(data: long, now: now, calendar: calendar)
+        let shortDensity = DailyRingLayout.makeDensity(data: short, now: now, calendar: calendar)
+        let longExpected = longDensity.expectedDotCount(for: .walking)
+        let shortExpected = shortDensity.expectedDotCount(for: .walking)
+        XCTAssertGreaterThan(shortExpected, 0)
+        XCTAssertEqual(longExpected / shortExpected, 2, accuracy: 0.05, "点の数が活動の分数に比例していない")
+
+        // 実際に置かれる点の数も、期待値に近い（小数部分は乱数で丸めるため平均で一致）
+        let dots = DailyRingLayout.makeDots(density: longDensity, seed: 99).filter { $0.kind == .walking }.count
+        XCTAssertEqual(Double(dots), longExpected, accuracy: longExpected * 0.05)
+    }
+
+    func testMoreStepsMakeWalkingDenser() {
+        let now = date(2026, 9, 19, 23, 30)
+        let dense = makeData(day: now, hourlySteps: steps([10: 6000]), segments: [seg(19, 10, 0, 11, 0, .walking)])
+        let sparse = makeData(day: now, hourlySteps: steps([10: 1200]), segments: [seg(19, 10, 0, 11, 0, .walking)])
+        let d = DailyRingLayout.makeDensity(data: dense, now: now, calendar: calendar).expectedDotCount(for: .walking)
+        let s = DailyRingLayout.makeDensity(data: sparse, now: now, calendar: calendar).expectedDotCount(for: .walking)
+        XCTAssertGreaterThan(d, s)
+    }
+
+    func testWalkingIsFilledInWhenSegmentsMissButStepsExist() {
+        // 活動区間は静止だけだが歩数が多い（検出漏れ）→ 歩行の輪にも点が出る
+        let now = date(2026, 9, 19, 23, 30)
+        let data = makeData(day: now, hourlySteps: steps([10: 3500]), segments: [seg(19, 10, 0, 11, 0, .stationary)])
+        let density = DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar)
+        XCTAssertGreaterThan(density.expectedDotCount(for: .walking), 0)
+    }
+
+    func testCapacityIsSmallerForInnerRings() {
+        XCTAssertGreaterThan(DailyRingLayout.dotCapacityPerSlice(for: .stationary), DailyRingLayout.dotCapacityPerSlice(for: .walking))
+        XCTAssertGreaterThan(DailyRingLayout.dotCapacityPerSlice(for: .walking), DailyRingLayout.dotCapacityPerSlice(for: .running))
+        XCTAssertGreaterThan(DailyRingLayout.dotCapacityPerSlice(for: .running), 1)
+    }
+
+    // MARK: - 決定性
+
+    func testSameInputGivesSameDotLayout() {
+        let now = date(2026, 9, 19, 15, 0)
+        let data = makeData(day: now, hourlySteps: steps([8: 3000]), segments: [seg(19, 0, 0, 8, 0, .stationary), seg(19, 8, 0, 9, 0, .walking), seg(19, 9, 0, 15, 0, .stationary)])
+        let a = DailyRingLayout.makeDots(density: DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar), seed: 20260919)
+        let b = DailyRingLayout.makeDots(density: DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar), seed: 20260919)
+        XCTAssertEqual(a, b)
+        let c = DailyRingLayout.makeDots(density: DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar), seed: 20260920)
+        XCTAssertNotEqual(a, c, "日付(seed)が違えば配置も変わる")
+    }
+
+    // MARK: - 連続性（密度が急に変わらない）
+
+    func testSmoothingLimitsJumpBetweenNeighboringSlices() {
+        // 0→1に急変する段差でも、隣り合うスライス間の差は0.25以下になる。
+        var step = [Double](repeating: 0, count: 60)
+        for i in 30..<60 { step[i] = 1 }
+        let smoothed = DailyRingLayout.smooth(step, periodic: false)
         var maxJump = 0.0
-        while t < 24 {
-            t += 0.002
-            let r = profile.radiusFraction(at: t)
-            maxJump = max(maxJump, abs(r - previous))
-            previous = r
-        }
-        // 1時間ごとに最大で約0.7動く極端なデータでも、0.002時間（7秒）で飛ぶ量は十分小さい。
-        XCTAssertLessThan(maxJump, 0.01, "半径が階段状に飛んでいる")
+        for i in 1..<smoothed.count { maxJump = max(maxJump, abs(smoothed[i] - smoothed[i - 1])) }
+        XCTAssertLessThanOrEqual(maxJump, 0.25 + 1e-9)
+        XCTAssertGreaterThan(maxJump, 0)
+        // 値の範囲は保たれる
+        XCTAssertGreaterThanOrEqual(smoothed.min()!, 0)
+        XCTAssertLessThanOrEqual(smoothed.max()!, 1 + 1e-9)
+        // 段差から遠い所は元の値のまま（にじみは前後20分に限る）
+        XCTAssertEqual(smoothed[10], 0, accuracy: 1e-9)
+        XCTAssertEqual(smoothed[50], 1, accuracy: 1e-9)
     }
 
-    func testRadiusCurveWrapsSmoothlyForFullDay() {
-        let profile = sampleProfile()
-        // 0時側と24時側が同じ値でつながる
-        XCTAssertEqual(profile.radiusFraction(at: 0), profile.radiusFraction(at: 24), accuracy: 1e-9)
-        let before = profile.radiusFraction(at: 24 - 0.001)
-        let after = profile.radiusFraction(at: 0.001)
-        XCTAssertEqual(before, after, accuracy: 0.005)
-    }
-
-    func testRadiusCurveOnPartialDayUsesPartialHourMidpoint() {
-        let now = date(2026, 9, 19, 9, 30)
-        let data = makeData(day: now, hourlySteps: steps([8: 3000, 9: 3000]))
-        let profile = DailyRingLayout.makeProfile(data: data, now: now, calendar: calendar)
-        XCTAssertFalse(profile.isPeriodic)
-        // 途中の時間の制御点は、経過した部分(9:00〜9:30)の真ん中 = 9.25時
-        XCTAssertEqual(profile.radiusFraction(at: 9.25), profile.slots.last!.radiusFraction, accuracy: 1e-9)
-        // 範囲の端でも連続（現在時刻の少し手前と、その先の値が飛ばない）
-        XCTAssertEqual(profile.radiusFraction(at: 9.5), profile.radiusFraction(at: 9.499), accuracy: 0.01)
-    }
-
-    // MARK: - 連続性: 活動種別の重み
-
-    func testKindWeightsSumToOneAndAreContinuousAcrossBoundaries() {
-        let profile = sampleProfile()
-        let eps = 1e-4
-        var boundary = 1.0
-        while boundary < 24 {
-            let before = profile.kindWeights(at: boundary - eps)
-            let after = profile.kindWeights(at: boundary + eps)
-            XCTAssertEqual(before.reduce(0) { $0 + $1.weight }, 1, accuracy: 1e-9)
-            XCTAssertEqual(after.reduce(0) { $0 + $1.weight }, 1, accuracy: 1e-9)
-            for kind in ActivityKind.allCases {
-                let wb = before.filter { $0.kind == kind }.reduce(0) { $0 + $1.weight }
-                let wa = after.filter { $0.kind == kind }.reduce(0) { $0 + $1.weight }
-                XCTAssertEqual(wb, wa, accuracy: 0.01, "\(boundary)時の境目で\(kind)の重みが飛んでいる")
+    func testDensityIsContinuousAcrossActivityChangesAndMidnight() {
+        // 過去日: 23:30〜24:00は歩行、0:00〜は静止 → 0時と24時のつなぎ目でも密度が急に変わらない。
+        let now = date(2026, 9, 19, 9, 0)
+        let day = date(2026, 9, 18)
+        let data = makeData(day: day, hourlySteps: steps([23: 3000]), segments: [
+            seg(18, 0, 0, 12, 0, .stationary), seg(18, 12, 0, 12, 30, .automotive), seg(18, 12, 30, 23, 30, .stationary),
+            ActivitySegment(start: date(2026, 9, 18, 23, 30), end: date(2026, 9, 19, 0, 0), kind: .walking)
+        ])
+        let density = DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar)
+        XCTAssertTrue(density.isPeriodic)
+        for kind in DailyRingLayout.ringOrder {
+            let values = density.smoothed[kind]!
+            XCTAssertEqual(values.count, 288)
+            for i in 0..<values.count {
+                let next = values[(i + 1) % values.count] // 最後の次は先頭（0時と24時のつなぎ目）
+                XCTAssertLessThanOrEqual(abs(next - values[i]), 0.25 + 1e-9, "\(kind)の密度が\(i)番目のスライス付近で急に変わっている")
             }
-            boundary += 1
         }
     }
 
-    func testKindWeightsChangeGraduallyAndBlendWidthIsNarrow() {
-        let profile = sampleProfile()
-        // 7時台(歩行)と6時台(静止)の境目 = 7時。ちょうど境目は半々、15分以上離れれば完全に片方。
-        func weight(_ kind: ActivityKind, at t: Double) -> Double {
-            profile.kindWeights(at: t).filter { $0.kind == kind }.reduce(0) { $0 + $1.weight }
-        }
-        XCTAssertEqual(weight(.walking, at: 7.0), 0.5, accuracy: 1e-6)
-        XCTAssertEqual(weight(.stationary, at: 7.0), 0.5, accuracy: 1e-6)
-        XCTAssertEqual(weight(.walking, at: 7.3), 1, accuracy: 1e-9)
-        XCTAssertEqual(weight(.stationary, at: 6.7), 1, accuracy: 1e-9)
-        // 途中は単調に入れ替わる
-        var previous = weight(.walking, at: 6.75)
-        var t = 6.75
-        while t <= 7.25 {
-            let w = weight(.walking, at: t)
-            XCTAssertGreaterThanOrEqual(w, previous - 1e-9)
-            previous = w
-            t += 0.005
-        }
-    }
-
-    func testKindWeightsWrapAroundForFullDay() {
-        let profile = sampleProfile()
-        // 0時台も23時台も静止 → 0時の前後で重みは変わらず静止
-        let a = profile.kindWeights(at: 24 - 0.001)
-        let b = profile.kindWeights(at: 0.001)
-        XCTAssertEqual(a.reduce(0) { $0 + $1.weight }, 1, accuracy: 1e-9)
-        XCTAssertEqual(b.reduce(0) { $0 + $1.weight }, 1, accuracy: 1e-9)
-        XCTAssertEqual(a.first(where: { $0.kind == .stationary })?.weight ?? 0, 1, accuracy: 1e-9)
-    }
-
-    func testKindWeightsWrapBlendsAcrossMidnightWhenKindsDiffer() {
-        // 23時台が歩行、0時台が静止の過去日: 24時(=0時)の境目でクロスフェードしてつながる。
-        var hourly = Array(repeating: 0, count: 24)
-        hourly[23] = 2000
-        let data = makeData(day: date(2026, 9, 18), hourlySteps: hourly)
-        let profile = DailyRingLayout.makeProfile(data: data, now: date(2026, 9, 19, 9), calendar: calendar)
-        let before = profile.kindWeights(at: 24 - 1e-4)
-        let after = profile.kindWeights(at: 1e-4)
-        func w(_ list: [(kind: ActivityKind, weight: Double)], _ k: ActivityKind) -> Double {
-            list.filter { $0.kind == k }.reduce(0) { $0 + $1.weight }
-        }
-        XCTAssertEqual(w(before, .walking), w(after, .walking), accuracy: 0.01)
-        XCTAssertEqual(w(before, .walking), 0.5, accuracy: 0.01)
-    }
-
-    // MARK: - 連続性: 色
-
-    func testColorIsContinuousAndWrapsAtMidnight() {
-        XCTAssertEqual(DailyRingLayout.color(atHour: 0), DailyRingLayout.color(atHour: 24))
-        var t = 0.0
-        var previous = DailyRingLayout.color(atHour: 0)
-        var maxJump = 0.0
-        while t < 24 {
-            t += 0.005
-            let c = DailyRingLayout.color(atHour: t)
-            maxJump = max(maxJump, abs(c.r - previous.r), abs(c.g - previous.g), abs(c.b - previous.b))
-            previous = c
-        }
-        XCTAssertLessThan(maxJump, 0.02, "色が時間帯の境目で飛んでいる")
-        // 一周がつながる: 24時の直前と0時の直後もほぼ同じ色
-        let a = DailyRingLayout.color(atHour: 24 - 0.001)
-        let b = DailyRingLayout.color(atHour: 0.001)
-        XCTAssertEqual(a.r, b.r, accuracy: 0.01)
-        XCTAssertEqual(a.g, b.g, accuracy: 0.01)
-        XCTAssertEqual(a.b, b.b, accuracy: 0.01)
+    func testPartialDayHasNoSmoothingBeyondTheEnd() {
+        let now = date(2026, 9, 19, 3, 0)
+        let data = makeData(day: now, segments: [seg(19, 0, 0, 3, 0, .stationary)])
+        let density = DailyRingLayout.makeDensity(data: data, now: now, calendar: calendar)
+        XCTAssertEqual(density.smoothed[.stationary]?.count, 36)
+        // 最後のスライスまで密度1のまま（端で薄れて欠けない）
+        XCTAssertEqual(density.smoothed[.stationary]?.last ?? 0, 1, accuracy: 1e-9)
+        XCTAssertEqual(density.smoothed[.stationary]?.first ?? 0, 1, accuracy: 1e-9)
     }
 
     // MARK: - 画像生成（クラッシュしないこと・大きさ）
 
+    private func sampleDensity() -> DailyRingDensity {
+        let now = date(2026, 9, 19, 9, 0)
+        let day = date(2026, 9, 18)
+        let hourly = [0, 0, 0, 0, 0, 0, 200, 3500, 4200, 300, 0, 0, 1500, 800, 0, 0, 0, 6000, 2500, 0, 0, 0, 0, 0]
+        let segments = [
+            seg(18, 0, 0, 7, 0, .stationary),
+            seg(18, 7, 0, 9, 0, .walking),
+            seg(18, 9, 0, 9, 40, .automotive),
+            seg(18, 9, 40, 12, 0, .stationary),
+            seg(18, 12, 0, 12, 40, .walking),
+            seg(18, 12, 40, 17, 0, .stationary),
+            seg(18, 17, 0, 18, 0, .running),
+            seg(18, 18, 0, 19, 0, .cycling),
+            seg(18, 19, 0, 23, 59, .stationary)
+        ]
+        return DailyRingLayout.makeDensity(data: makeData(day: day, hourlySteps: hourly, segments: segments), now: now, calendar: calendar)
+    }
+
     func testRendererProducesImageOfRequestedSize() {
-        let profile = sampleProfile()
-        let image = DailyRingRenderer.render(profile: profile, date: date(2026, 9, 18), size: 160, calendar: calendar)
+        let image = DailyRingRenderer.render(density: sampleDensity(), date: date(2026, 9, 18), size: 160, calendar: calendar)
         XCTAssertEqual(image.size.width * image.scale, 160, accuracy: 0.5)
         XCTAssertEqual(image.size.height * image.scale, 160, accuracy: 0.5)
 
-        // 今日の途中（データが空でも描ける）
+        // 今日の途中・データが空でも描ける
         let now = date(2026, 9, 19, 9, 0)
-        let todayProfile = DailyRingLayout.makeProfile(data: makeData(day: now, hourlySteps: steps([8: 2000])), now: now, calendar: calendar)
-        let todayImage = DailyRingRenderer.render(profile: todayProfile, date: now, size: 160, calendar: calendar)
+        let empty = DailyRingLayout.makeDensity(data: makeData(day: now), now: now, calendar: calendar)
+        let todayImage = DailyRingRenderer.render(density: empty, date: now, size: 160, calendar: calendar)
         XCTAssertEqual(todayImage.size.width * todayImage.scale, 160, accuracy: 0.5)
     }
 
@@ -349,19 +295,23 @@ final class DailyRingLayoutTests: XCTestCase {
         guard let dir = ProcessInfo.processInfo.environment["RING_SAMPLE_DIR"], !dir.isEmpty else { return }
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
 
-        let past = sampleProfile()
-        let pastImage = DailyRingRenderer.render(profile: past, date: date(2026, 9, 18), size: 1080, calendar: calendar)
+        let pastImage = DailyRingRenderer.render(density: sampleDensity(), date: date(2026, 9, 18), size: 1080, calendar: calendar)
         try pastImage.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("ring-past-full-day.png"))
 
         let now = date(2026, 9, 19, 14, 20)
         let hourly = [0, 0, 0, 0, 0, 0, 150, 3200, 4300, 600, 0, 0, 1800, 900, 200, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         let segments = [
-            ActivitySegment(start: date(2026, 9, 19, 7), end: date(2026, 9, 19, 9), kind: .walking),
-            ActivitySegment(start: date(2026, 9, 19, 9), end: date(2026, 9, 19, 9, 45), kind: .automotive),
-            ActivitySegment(start: date(2026, 9, 19, 12), end: date(2026, 9, 19, 13), kind: .running)
+            seg(19, 0, 0, 6, 45, .stationary),
+            seg(19, 6, 45, 7, 0, .walking),
+            seg(19, 7, 0, 9, 0, .walking),
+            seg(19, 9, 0, 9, 45, .automotive),
+            seg(19, 9, 45, 12, 0, .stationary),
+            seg(19, 12, 0, 13, 0, .running),
+            seg(19, 13, 0, 13, 30, .walking),
+            seg(19, 13, 30, 14, 20, .stationary)
         ]
-        let today = DailyRingLayout.makeProfile(data: makeData(day: now, hourlySteps: hourly, segments: segments), now: now, calendar: calendar)
-        let todayImage = DailyRingRenderer.render(profile: today, date: now, size: 1080, calendar: calendar)
+        let density = DailyRingLayout.makeDensity(data: makeData(day: now, hourlySteps: hourly, segments: segments), now: now, calendar: calendar)
+        let todayImage = DailyRingRenderer.render(density: density, date: now, size: 1080, calendar: calendar)
         try todayImage.pngData()?.write(to: URL(fileURLWithPath: dir).appendingPathComponent("ring-today-partial.png"))
     }
 }

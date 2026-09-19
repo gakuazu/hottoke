@@ -1,19 +1,13 @@
 import UIKit
 import CoreGraphics
 
-/// 「1日の輪」の静止画レンダラー（docs/22-app1-radial-redesign.md）。
-///
-/// 描き方の流れ:
-///  1. 使う活動種別ごとに、既存の数学模様（KaleidoscopeRenderer.renderPatternDiskImage）を
-///     「白い円盤状の模様」として1枚ずつ描く（回転コピー・鏡映はしない）。
-///  2. 画像の全ピクセルについて「角度→時刻」「中心からの距離」を求め、
-///       ・距離が、その時刻の半径カーブ（DailyRingProfile.radiusFraction）の内側なら描く
-///       ・その時刻の活動種別の重み（クロスフェード）で、各種別の模様を混ぜる
-///       ・色は時刻に沿った連続グラデーション（DailyRingLayout.color）
-///     として色付けする。今日の途中なら現在時刻までの角度しか描かず、その先は空白のまま。
-///  3. 背景・目盛り・輪郭の発光・現在時刻の目印・文字をUIKitで重ねてUIImageにする。
-///
-/// 座標は画面座標（y下向き）。時刻tの方向は (sin, -cos) で、0時が真上・時計回り。
+/// 「1日の輪」の静止画レンダラー（docs/22-app1-radial-redesign.md「表現方式の変更」）。
+/// FlowingDataの「Cycle of Many」のような点描リング:
+///  ・1周が24時間（0時が真上、時計回り）
+///  ・活動ごとに決まった輪（外側から 静止 → 車移動 → 自転車 → 歩行 → 走行）
+///  ・点の数がその時刻にその活動をしていた量。密なところは点が連なって光の帯に、疎なところはぱらぱら散る
+///  ・暗い背景に、加算合成で発光感を出す
+/// 座標は画面座標（y下向き）。今日の途中は現在時刻までしか点がなく、その先の輪は空のまま残る。
 enum DailyRingRenderer {
 
     static let defaultSize: CGFloat = 1080
@@ -21,35 +15,14 @@ enum DailyRingRenderer {
     /// 最大半径 = 画像の一辺 × この値。外側に目盛りと文字の余白を残す。
     private static let maxRadiusRatio: CGFloat = 0.40
 
-    private static let whitePalette = KaleidoscopePalette(
-        id: "ring-white", name: "",
-        hexColors: Array(repeating: "#ffffff", count: 6),
-        isLocked: false
-    )
-
-    /// 活動種別ごとの模様の細かさ・周期パラメータ。
-    /// `gain`は細い線の模様が暗くなりすぎないための濃さの補正（線が細いスタイルほど大きく）。
-    private static func patternSettings(for style: PatternStyle) -> (detail: Double, symmetryCount: Int, gain: Double) {
-        switch style {
-        case .fractal: return (0.85, 1, 2.6)      // 円全体に幹を広げるため周期1
-        case .spirograph: return (0.8, 3, 1.6)
-        case .waves: return (0.7, 3, 1.8)
-        case .tiling: return (0.6, 3, 1.4)
-        case .lissajous: return (0.8, 3, 2.0)
-        default: return (0.6, 3, 1.5)
-        }
-    }
-
-    // MARK: - 公開API
-
-    static func render(profile: DailyRingProfile, date: Date, size: CGFloat = defaultSize, calendar: Calendar = .current) -> UIImage {
+    static func render(density: DailyRingDensity, date: Date, size: CGFloat = defaultSize, calendar: Calendar = .current) -> UIImage {
         let side = max(64, Int(size.rounded()))
+        let sideF = CGFloat(side)
         let canvas = CGSize(width: side, height: side)
-        let center = CGPoint(x: CGFloat(side) / 2, y: CGFloat(side) / 2)
-        let rMax = CGFloat(side) * maxRadiusRatio
+        let center = CGPoint(x: sideF / 2, y: sideF / 2)
+        let rMax = sideF * maxRadiusRatio
         let seed = daySeed(date: date, calendar: calendar)
-
-        let body = renderBody(profile: profile, side: side, rMax: rMax, seed: seed)
+        let dots = DailyRingLayout.makeDots(density: density, seed: seed)
 
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
@@ -57,155 +30,19 @@ enum DailyRingRenderer {
         let renderer = UIGraphicsImageRenderer(size: canvas, format: format)
         return renderer.image { rc in
             let ctx = rc.cgContext
-            drawBackground(ctx: ctx, side: CGFloat(side), center: center, seed: seed)
-            drawGuides(ctx: ctx, center: center, rMax: rMax)
-
-            if let body {
-                let image = UIImage(cgImage: body)
-                let rect = CGRect(origin: .zero, size: canvas)
-                image.draw(in: rect)
-                // 発光感を出すため、加算合成でもう一度うっすら重ねる。
-                image.draw(in: rect, blendMode: .plusLighter, alpha: 0.5)
+            drawBackground(ctx: ctx, side: sideF, center: center, seed: seed)
+            drawTracks(ctx: ctx, center: center, rMax: rMax)
+            drawDots(ctx: ctx, dots: dots, center: center, rMax: rMax)
+            if density.isPartialDay {
+                drawNowMarker(ctx: ctx, hour: density.drawnHours, center: center, rMax: rMax, side: sideF)
             }
-
-            drawOutline(ctx: ctx, profile: profile, center: center, rMax: rMax)
-            if profile.isPartialDay {
-                drawNowMarker(ctx: ctx, hour: profile.drawnHours, center: center, rMax: rMax, side: CGFloat(side))
-            }
-            drawCenterGlow(ctx: ctx, center: center, radius: rMax * 0.10)
-            drawLabels(ctx: ctx, profile: profile, date: date, center: center, rMax: rMax, side: CGFloat(side), calendar: calendar)
+            drawLabels(ctx: ctx, density: density, date: date, center: center, rMax: rMax, side: sideF, calendar: calendar)
         }
     }
-
-    // MARK: - 本体（模様 × 半径 × 色 × 種別のクロスフェード）
 
     private static func daySeed(date: Date, calendar: Calendar) -> UInt64 {
         let c = calendar.dateComponents([.year, .month, .day], from: date)
         return UInt64((c.year ?? 2026) * 10_000 + (c.month ?? 1) * 100 + (c.day ?? 1))
-    }
-
-    /// 白い円盤状の模様を、画像全体と同じ大きさ・同じ座標のRGBA配列に描き込んで返す。
-    private static func patternLayer(style: PatternStyle, side: Int, rMax: CGFloat, seed: UInt64) -> [UInt8]? {
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
-        let settings = patternSettings(for: style)
-        guard let disk = KaleidoscopeRenderer.renderPatternDiskImage(
-            style: style, radius: rMax, palette: whitePalette,
-            detail: settings.detail, seed: seed, time: 3.0, symmetryCount: settings.symmetryCount
-        ) else { return nil }
-        let drawn: Bool = pixels.withUnsafeMutableBytes { raw -> Bool in
-            guard let ctx = CGContext(
-                data: raw.baseAddress,
-                width: side, height: side,
-                bitsPerComponent: 8, bytesPerRow: side * 4,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return false }
-            let dim = CGFloat(disk.width)
-            let origin = (CGFloat(side) - dim) / 2
-            ctx.draw(disk, in: CGRect(x: origin, y: origin, width: dim, height: dim))
-            return true
-        }
-        return drawn ? pixels : nil
-    }
-
-    private static func renderBody(profile: DailyRingProfile, side: Int, rMax: CGFloat, seed: UInt64) -> CGImage? {
-        let drawn = min(DailyRingLayout.hoursPerDay, profile.drawnHours)
-        guard drawn > 0, !profile.slots.isEmpty else { return nil }
-
-        // 使う活動種別ごとの模様レイヤー（同じ形のスタイルは1回だけ描く）。
-        let kinds = profile.usedKinds
-        var styleCache: [PatternStyle: [UInt8]] = [:]
-        var layers: [[UInt8]] = []
-        for kind in kinds {
-            let style = DailyRingLayout.patternStyle(for: kind)
-            if styleCache[style] == nil {
-                styleCache[style] = patternLayer(style: style, side: side, rMax: rMax, seed: seed) ?? [UInt8](repeating: 0, count: side * side * 4)
-            }
-            layers.append(styleCache[style] ?? [])
-        }
-        let gains = kinds.map { patternSettings(for: DailyRingLayout.patternStyle(for: $0)).gain }
-        var kindIndex: [ActivityKind: Int] = [:]
-        for (i, kind) in kinds.enumerated() { kindIndex[kind] = i }
-
-        // 時刻ごとの半径・色・種別の重みを、細かい表(LUT)にしておく（ピクセルごとに再計算しない）。
-        let lutCount = 7200
-        let rMaxD = Double(rMax)
-        var radiusLUT = [Double](repeating: 0, count: lutCount + 1)
-        var colorLUT = [RingRGB](repeating: RingRGB(r: 0, g: 0, b: 0), count: lutCount + 1)
-        var weightLUT = [[Double]](repeating: [Double](repeating: 0, count: lutCount + 1), count: kinds.count)
-        for i in 0...lutCount {
-            let t = Double(i) / Double(lutCount) * DailyRingLayout.hoursPerDay
-            let tClamped = min(t, drawn)
-            radiusLUT[i] = profile.radiusFraction(at: tClamped) * rMaxD
-            colorLUT[i] = DailyRingLayout.color(atHour: t)
-            for (kind, weight) in profile.kindWeights(at: min(t, drawn - 1e-9)) {
-                if let ki = kindIndex[kind] { weightLUT[ki][i] += weight }
-            }
-        }
-
-        let twoPi = 2 * Double.pi
-        let drawnRadians = drawn / DailyRingLayout.hoursPerDay * twoPi
-        let isPartial = profile.isPartialDay
-        let cx = Double(side) / 2, cy = Double(side) / 2
-        let limit = (rMaxD + 2) * (rMaxD + 2)
-        
-        var out = [UInt8](repeating: 0, count: side * side * 4)
-        for y in 0..<side {
-            let dy = Double(y) + 0.5 - cy
-            for x in 0..<side {
-                let dx = Double(x) + 0.5 - cx
-                let d2 = dx * dx + dy * dy
-                if d2 > limit { continue }
-                let dist = d2.squareRoot()
-
-                var theta = atan2(dx, -dy)
-                if theta < 0 { theta += twoPi }
-
-                // 今日の途中: 現在時刻より先は空白。境目は1ピクセルほどぼかす。
-                var angularCoverage = 1.0
-                if isPartial {
-                    if theta > drawnRadians + 0.02 { continue }
-                    angularCoverage = min(1, max(0, (drawnRadians - theta) * dist + 0.5))
-                    angularCoverage *= min(1, max(0, theta * dist + 0.5))
-                    if angularCoverage <= 0 { continue }
-                }
-
-                let li = min(lutCount, Int(theta / twoPi * Double(lutCount) + 0.5))
-                let rOut = radiusLUT[li]
-                let radialCoverage = min(1, max(0, rOut - dist + 0.5))
-                if radialCoverage <= 0 { continue }
-
-                // 面の薄い塗り: 外側ほど濃い（活動量が多いところほど明るく見える）。
-                let bodyAlpha = 0.06 + 0.30 * (dist / rMaxD)
-
-                let pixelIndex = (y * side + x) * 4
-                var total = 0.0
-                for ki in 0..<kinds.count {
-                    let w = weightLUT[ki][li]
-                    if w < 0.002 { continue }
-                    let patternAlpha = min(1, Double(layers[ki][pixelIndex + 3]) / 255 * gains[ki])
-                    let a = 1 - (1 - patternAlpha) * (1 - bodyAlpha)
-                    total += w * a
-                }
-                total = min(1, total) * radialCoverage * angularCoverage
-                if total <= 0 { continue }
-
-                let c = colorLUT[li]
-                out[pixelIndex] = UInt8(min(255, max(0, c.r * total * 255 + 0.5)))
-                out[pixelIndex + 1] = UInt8(min(255, max(0, c.g * total * 255 + 0.5)))
-                out[pixelIndex + 2] = UInt8(min(255, max(0, c.b * total * 255 + 0.5)))
-                out[pixelIndex + 3] = UInt8(min(255, max(0, total * 255 + 0.5)))
-            }
-        }
-
-        guard let provider = CGDataProvider(data: Data(out) as CFData) else { return nil }
-        return CGImage(
-            width: side, height: side,
-            bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: side * 4,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
-            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent
-        )
     }
 
     // MARK: - 座標
@@ -215,25 +52,15 @@ enum DailyRingRenderer {
         return CGPoint(x: center.x + CGFloat(v.dx) * radius, y: center.y + CGFloat(v.dy) * radius)
     }
 
-    private static func uiColor(_ c: RingRGB, whiten: Double = 0, alpha: CGFloat = 1) -> CGColor {
-        let w = min(1, max(0, whiten))
-        return CGColor(
-            red: CGFloat(c.r + (1 - c.r) * w),
-            green: CGFloat(c.g + (1 - c.g) * w),
-            blue: CGFloat(c.b + (1 - c.b) * w),
-            alpha: alpha
-        )
-    }
-
-    // MARK: - 背景・目盛り
+    // MARK: - 背景・輪のレール
 
     private static func drawBackground(ctx: CGContext, side: CGFloat, center: CGPoint, seed: UInt64) {
-        ctx.setFillColor(CGColor(red: 0.02, green: 0.02, blue: 0.05, alpha: 1))
+        ctx.setFillColor(CGColor(red: 0.015, green: 0.015, blue: 0.04, alpha: 1))
         ctx.fill(CGRect(x: 0, y: 0, width: side, height: side))
 
         let colors = [
-            CGColor(red: 0.10, green: 0.09, blue: 0.20, alpha: 1),
-            CGColor(red: 0.02, green: 0.02, blue: 0.05, alpha: 1)
+            CGColor(red: 0.07, green: 0.07, blue: 0.16, alpha: 1),
+            CGColor(red: 0.015, green: 0.015, blue: 0.04, alpha: 1)
         ]
         if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 1]) {
             ctx.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: side * 0.72, options: [.drawsAfterEndLocation])
@@ -241,42 +68,39 @@ enum DailyRingRenderer {
 
         // ごく淡い星のような点（日付から決まるので同じ日は同じ絵になる）。
         var generator = SeededGenerator(seed: seed &* 2654435761 &+ 17)
-        for _ in 0..<70 {
+        for _ in 0..<60 {
             let x = CGFloat.random(in: 0...side, using: &generator)
             let y = CGFloat.random(in: 0...side, using: &generator)
-            let r = CGFloat.random(in: 0.6...1.6, using: &generator)
-            let a = CGFloat.random(in: 0.08...0.30, using: &generator)
+            let r = CGFloat.random(in: 0.5...1.3, using: &generator)
+            let a = CGFloat.random(in: 0.06...0.22, using: &generator)
             ctx.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: a))
             ctx.fillEllipse(in: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2))
         }
     }
 
-    /// うっすらした目盛りの円（500/1500/3000歩）と、1時間ごとの目盛り。
-    private static func drawGuides(ctx: CGContext, center: CGPoint, rMax: CGFloat) {
+    /// 各輪のうっすらしたレール（まだ点がない範囲でも輪の位置が分かるように）と、1時間ごとの目盛り。
+    private static func drawTracks(ctx: CGContext, center: CGPoint, rMax: CGFloat) {
         ctx.saveGState()
-        ctx.setLineWidth(1)
-
-        // 最小半径の円と、歩数の目盛りの円
-        var fractions = [DailyRingLayout.minRadiusFraction]
-        fractions += DailyRingLayout.guideStepsMarks.map { DailyRingLayout.radiusFraction(forEffectiveSteps: Double($0)) }
-        for (i, f) in fractions.enumerated() {
-            let r = rMax * CGFloat(f)
-            ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: i == 0 ? 0.05 : 0.09))
-            ctx.strokeEllipse(in: CGRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+        for kind in DailyRingLayout.ringOrder {
+            let band = DailyRingLayout.band(for: kind)
+            let outer = rMax * CGFloat(band.outer)
+            let inner = rMax * CGFloat(band.inner)
+            let path = CGMutablePath()
+            path.addEllipse(in: CGRect(x: center.x - outer, y: center.y - outer, width: outer * 2, height: outer * 2))
+            path.addEllipse(in: CGRect(x: center.x - inner, y: center.y - inner, width: inner * 2, height: inner * 2))
+            let c = DailyRingLayout.ringColor(for: kind)
+            ctx.setFillColor(CGColor(red: CGFloat(c.r), green: CGFloat(c.g), blue: CGFloat(c.b), alpha: 0.045))
+            ctx.addPath(path)
+            ctx.fillPath(using: .evenOdd)
         }
-        // 最大半径の外周
-        ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.14))
-        ctx.strokeEllipse(in: CGRect(x: center.x - rMax, y: center.y - rMax, width: rMax * 2, height: rMax * 2))
 
         // 1時間ごとの目盛り（0/6/12/18時は長く太く）
         for hour in 0..<24 {
             let major = hour % 6 == 0
-            let inner = rMax * (major ? 1.03 : 1.03)
-            let outer = rMax * (major ? 1.09 : 1.06)
-            let p0 = point(hour: Double(hour), radius: inner, center: center)
-            let p1 = point(hour: Double(hour), radius: outer, center: center)
+            let p0 = point(hour: Double(hour), radius: rMax * 1.03, center: center)
+            let p1 = point(hour: Double(hour), radius: rMax * (major ? 1.09 : 1.06), center: center)
             ctx.setLineWidth(major ? 2.5 : 1.2)
-            ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: major ? 0.7 : 0.28))
+            ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: major ? 0.7 : 0.25))
             ctx.move(to: p0)
             ctx.addLine(to: p1)
             ctx.strokePath()
@@ -284,61 +108,44 @@ enum DailyRingRenderer {
         ctx.restoreGState()
     }
 
-    // MARK: - 輪郭の発光
+    // MARK: - 点
 
-    private static func drawOutline(ctx: CGContext, profile: DailyRingProfile, center: CGPoint, rMax: CGFloat) {
-        let drawn = min(DailyRingLayout.hoursPerDay, profile.drawnHours)
-        guard drawn > 0, !profile.slots.isEmpty else { return }
-        let steps = max(2, Int(drawn * 60))
-        var points: [CGPoint] = []
-        points.reserveCapacity(steps + 1)
-        for i in 0...steps {
-            let t = drawn * Double(i) / Double(steps)
-            points.append(point(hour: t, radius: rMax * CGFloat(profile.radiusFraction(at: t)), center: center))
-        }
-
+    private static func drawDots(ctx: CGContext, dots: [RingDot], center: CGPoint, rMax: CGFloat) {
+        let baseRadius = rMax * CGFloat(DailyRingLayout.dotRadiusFraction)
         ctx.saveGState()
-        ctx.setLineCap(.round)
-        ctx.setLineJoin(.round)
-        let passes: [(width: CGFloat, alpha: CGFloat, whiten: Double, additive: Bool)] = [
-            (16, 0.10, 0.0, true),
-            (7, 0.22, 0.1, true),
-            (2.6, 0.95, 0.35, false)
-        ]
-        for pass in passes {
-            ctx.setBlendMode(pass.additive ? .plusLighter : .normal)
-            ctx.setLineWidth(pass.width)
-            for i in 0..<steps {
-                let tMid = drawn * (Double(i) + 0.5) / Double(steps)
-                ctx.setStrokeColor(uiColor(DailyRingLayout.color(atHour: tMid), whiten: pass.whiten, alpha: pass.alpha))
-                ctx.move(to: points[i])
-                ctx.addLine(to: points[i + 1])
-                ctx.strokePath()
-            }
-        }
+        ctx.setBlendMode(.plusLighter)
+        for kind in DailyRingLayout.ringOrder {
+            let c = DailyRingLayout.ringColor(for: kind)
+            let r = CGFloat(c.r), g = CGFloat(c.g), b = CGFloat(c.b)
+            let kindDots = dots.filter { $0.kind == kind }
+            guard !kindDots.isEmpty else { continue }
 
-        // 今日の途中: 0時側と現在時刻側の、中心へ向かう縁を細い線で閉じる。
-        if profile.isPartialDay {
-            ctx.setBlendMode(.plusLighter)
-            ctx.setLineWidth(1.6)
-            for t in [0.0, drawn] {
-                ctx.setStrokeColor(uiColor(DailyRingLayout.color(atHour: t), whiten: 0.2, alpha: 0.35))
-                ctx.move(to: center)
-                ctx.addLine(to: point(hour: t, radius: rMax * CGFloat(profile.radiusFraction(at: t)), center: center))
-                ctx.strokePath()
+            // やわらかい光のにじみ（大きく薄い円）
+            ctx.setFillColor(red: r, green: g, blue: b, alpha: 0.05)
+            for dot in kindDots {
+                let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
+                let rad = baseRadius * CGFloat(dot.size) * 2.6
+                ctx.fillEllipse(in: CGRect(x: p.x - rad, y: p.y - rad, width: rad * 2, height: rad * 2))
+            }
+            // 点の本体
+            for dot in kindDots {
+                let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
+                let rad = baseRadius * CGFloat(dot.size)
+                ctx.setFillColor(red: r, green: g, blue: b, alpha: CGFloat(dot.brightness) * 0.85)
+                ctx.fillEllipse(in: CGRect(x: p.x - rad, y: p.y - rad, width: rad * 2, height: rad * 2))
             }
         }
         ctx.restoreGState()
     }
 
-    /// 現在時刻の位置の目印（細い線と、外周の小さな点）。
+    /// 現在時刻の位置の目印（細い点線と、外周の小さな点）。
     private static func drawNowMarker(ctx: CGContext, hour: Double, center: CGPoint, rMax: CGFloat, side: CGFloat) {
-        let inner = point(hour: hour, radius: rMax * 0.12, center: center)
+        let inner = point(hour: hour, radius: rMax * 0.14, center: center)
         let outer = point(hour: hour, radius: rMax * 1.03, center: center)
         ctx.saveGState()
-        ctx.setLineWidth(1.6)
-        ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.55))
-        ctx.setLineDash(phase: 0, lengths: [6, 6])
+        ctx.setLineWidth(1.4)
+        ctx.setStrokeColor(CGColor(red: 1, green: 1, blue: 1, alpha: 0.5))
+        ctx.setLineDash(phase: 0, lengths: [5, 6])
         ctx.move(to: inner)
         ctx.addLine(to: outer)
         ctx.strokePath()
@@ -354,42 +161,46 @@ enum DailyRingRenderer {
         ctx.restoreGState()
     }
 
-    private static func drawCenterGlow(ctx: CGContext, center: CGPoint, radius: CGFloat) {
-        let colors = [CGColor(red: 1, green: 1, blue: 1, alpha: 0.35), CGColor(red: 1, green: 1, blue: 1, alpha: 0)]
-        guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 1]) else { return }
-        ctx.saveGState()
-        ctx.setBlendMode(.plusLighter)
-        ctx.drawRadialGradient(gradient, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
-        ctx.restoreGState()
-    }
+    // MARK: - 文字（0/6/12/18時、日付、輪の凡例）
 
-    // MARK: - 文字（0/6/12/18時、日付）
-
-    private static func drawText(_ text: String, at center: CGPoint, fontSize: CGFloat, weight: UIFont.Weight, alpha: CGFloat, leftAligned: Bool = false) {
+    private static func drawText(_ text: String, at anchor: CGPoint, fontSize: CGFloat, weight: UIFont.Weight, alpha: CGFloat, leftAligned: Bool = false) {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.systemFont(ofSize: fontSize, weight: weight),
             .foregroundColor: UIColor(white: 1, alpha: alpha)
         ]
         let string = NSAttributedString(string: text, attributes: attributes)
         let size = string.size()
-        let x = leftAligned ? center.x : center.x - size.width / 2
-        string.draw(at: CGPoint(x: x, y: center.y - size.height / 2))
+        let x = leftAligned ? anchor.x : anchor.x - size.width / 2
+        string.draw(at: CGPoint(x: x, y: anchor.y - size.height / 2))
     }
 
-    private static func drawLabels(ctx: CGContext, profile: DailyRingProfile, date: Date, center: CGPoint, rMax: CGFloat, side: CGFloat, calendar: Calendar) {
+    private static func drawLabels(ctx: CGContext, density: DailyRingDensity, date: Date, center: CGPoint, rMax: CGFloat, side: CGFloat, calendar: Calendar) {
         for hour in [0, 6, 12, 18] {
             let p = point(hour: Double(hour), radius: rMax * 1.16, center: center)
             drawText("\(hour)", at: p, fontSize: side * 0.030, weight: .semibold, alpha: 0.75)
         }
 
+        // 日付は左上の角に。
         let c = calendar.dateComponents([.year, .month, .day], from: date)
-        // 日付は左上の角に（下の「12」の目盛り文字と重ならないように）。
         drawText(String(format: "%04d.%d.%d", c.year ?? 0, c.month ?? 0, c.day ?? 0),
                  at: CGPoint(x: side * 0.045, y: side * 0.05), fontSize: side * 0.030, weight: .medium, alpha: 0.7, leftAligned: true)
-        if profile.isPartialDay {
-            let totalMinutes = Int(profile.drawnHours * 60)
+        if density.isPartialDay {
+            let totalMinutes = Int(density.drawnHours * 60)
             drawText(String(format: "%d:%02d 時点", totalMinutes / 60, totalMinutes % 60),
-                     at: CGPoint(x: side * 0.045, y: side * 0.05 + side * 0.040), fontSize: side * 0.024, weight: .regular, alpha: 0.5, leftAligned: true)
+                     at: CGPoint(x: side * 0.045, y: side * 0.09), fontSize: side * 0.024, weight: .regular, alpha: 0.5, leftAligned: true)
         }
+
+        // 輪の凡例（左下の角）。外側の輪から順に、色の点と活動名。
+        let lineHeight = side * 0.036
+        let top = side * 0.955 - lineHeight * CGFloat(DailyRingLayout.ringOrder.count - 1)
+        for (i, kind) in DailyRingLayout.ringOrder.enumerated() {
+            let y = top + lineHeight * CGFloat(i)
+            let color = DailyRingLayout.ringColor(for: kind)
+            let dotR = side * 0.0065
+            ctx.setFillColor(red: CGFloat(color.r), green: CGFloat(color.g), blue: CGFloat(color.b), alpha: 0.95)
+            ctx.fillEllipse(in: CGRect(x: side * 0.05 - dotR, y: y - dotR, width: dotR * 2, height: dotR * 2))
+            drawText(kind.displayName, at: CGPoint(x: side * 0.068, y: y), fontSize: side * 0.022, weight: .regular, alpha: 0.6, leftAligned: true)
+        }
+        drawText("外側の輪から", at: CGPoint(x: side * 0.045, y: top - lineHeight * 0.95), fontSize: side * 0.018, weight: .regular, alpha: 0.35, leftAligned: true)
     }
 }
