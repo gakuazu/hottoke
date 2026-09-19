@@ -141,6 +141,20 @@ enum DailyRingLayout {
         angleDegrees(forHour: min(hoursPerDay, max(0, drawn)))
     }
 
+    // MARK: - 端末に残っている履歴の範囲
+
+    /// 端末（CMMotionActivityManager / CMPedometer）が保持する履歴の目安の日数（今日を含む）。
+    static let retentionDays: Int = 7
+
+    /// その日のデータが端末にまだ残っていそうか（未来の日は含まない）。
+    static func isWithinRetention(date: Date, now: Date, calendar: Calendar = .current) -> Bool {
+        let today = calendar.startOfDay(for: now)
+        let target = calendar.startOfDay(for: date)
+        guard target <= today,
+              let oldest = calendar.date(byAdding: .day, value: -(retentionDays - 1), to: today) else { return false }
+        return target >= oldest
+    }
+
     // MARK: - 点の数
 
     /// 密度1（そのスライドの間ずっとその活動）のときに、1スライス・1つの輪に置く点の数。

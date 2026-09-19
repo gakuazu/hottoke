@@ -24,8 +24,8 @@ targets:
       path: HottokeApp/Resources/Info.plist
       properties:
         CFBundleDisplayName: カレイド日記
-        NSMotionUsageDescription: "今日の活動データから模様の動画や「1日の輪」の画像を作るために使います。データは端末の外へは一切送信しません。"
-        NSPhotoLibraryAddUsageDescription: "作成した模様の動画や画像をあなたの写真ライブラリに保存するために使います。"
+        NSMotionUsageDescription: "今日の活動データから、1日の活動を点で描いた「1日の輪」の画像を作るために使います。データは端末の外へは一切送信しません。"
+        NSPhotoLibraryAddUsageDescription: "作成した「1日の輪」の画像をあなたの写真ライブラリに保存するために使います。"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// 「過去の模様アーカイブ」画面（docs/02-spec.md 2章 #6）。月表示のカレンダーで、
-/// 日ごとに「すでに生成済み」「まだ未生成だが今から生成可能」「今からはもう生成不可能」
-/// 「未来（選択不可）」の4状態を色分けして表示する。
+/// 「アーカイブ」画面。月表示のカレンダーで日付を選ぶと、その日の「1日の輪」（点描リング）を表示する。
+/// 端末の歩数計・活動履歴は直近約7日分までしか残っていないため、日ごとに
+/// 「見られる日（直近約7日）」「データが残っていない日」「未来（選択不可）」を色分けして表示する。
+/// （以前の「動画を生成済みの日」の表示は廃止。動画・スタイル関連のコードは復活用に残してある）
 struct CalendarArchiveView: View {
-    @StateObject private var archiveStore = ArchivePatternStore()
     @State private var displayedMonth = Calendar.current.startOfDay(for: Date())
     @State private var selection: DateSelection?
     @State private var showUnavailableAlert = false
@@ -33,12 +33,12 @@ struct CalendarArchiveView: View {
             }
             .navigationTitle("アーカイブ")
             .sheet(item: $selection) { selection in
-                ArchiveDayDetailView(date: selection.date, store: archiveStore)
+                ArchiveDayDetailView(date: selection.date)
             }
-            .alert("この日の模様は作れません", isPresented: $showUnavailableAlert) {
+            .alert("この日のデータはありません", isPresented: $showUnavailableAlert) {
                 Button("OK", role: .cancel) {}
             } message: {
-                Text("この日のデータはもう端末に残っていません。iPhoneが保持している活動履歴はおおむね直近1週間ほどのため、それより前で未生成の日は今から作ることができません。")
+                Text("この日の歩数・活動のデータはもう端末に残っていません。iPhoneが保持している履歴はおおむね直近1週間ほどのため、それより前の日の「1日の輪」は作れません。")
             }
         }
     }
@@ -85,9 +85,8 @@ struct CalendarArchiveView: View {
 
     private var legend: some View {
         VStack(alignment: .leading, spacing: 6) {
-            legendRow(color: .blue.opacity(0.75), text: "すでに模様を作った日（色は使ったスタイルを表す）")
-            legendRow(color: Color.secondary.opacity(0.15), text: "まだ作っていないが、今から作れる日")
-            legendRow(color: Color.secondary.opacity(0.06), text: "端末に記録が残っておらず、今からは作れない日")
+            legendRow(color: .blue.opacity(0.75), text: "その日の「1日の輪」を見られる日（直近約1週間）")
+            legendRow(color: Color.secondary.opacity(0.06), text: "端末に記録が残っておらず、見られない日")
         }
         .font(.caption2)
         .foregroundStyle(.secondary)
@@ -103,17 +102,16 @@ struct CalendarArchiveView: View {
     @ViewBuilder
     private func dayCell(date: Date?) -> some View {
         if let date {
-            let entry = archiveStore.entry(for: date)
             let isFuture = calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
             let isToday = calendar.isDateInToday(date)
-            let generatable = !isFuture && archiveStore.isGeneratable(date: date)
+            let available = !isFuture && DailyRingLayout.isWithinRetention(date: date, now: Date(), calendar: calendar)
 
             Button {
-                handleTap(date: date, entry: entry, isFuture: isFuture, generatable: generatable)
+                handleTap(date: date, isFuture: isFuture, available: available)
             } label: {
                 ZStack {
                     Circle()
-                        .fill(fillColor(entry: entry, isFuture: isFuture, generatable: generatable))
+                        .fill(fillColor(isFuture: isFuture, available: available))
                         .frame(width: 36, height: 36)
                     if isToday {
                         Circle()
@@ -132,19 +130,16 @@ struct CalendarArchiveView: View {
         }
     }
 
-    private func fillColor(entry: ArchiveEntry?, isFuture: Bool, generatable: Bool) -> Color {
-        if let entry, let style = PatternStyle(rawValue: entry.patternStyleRaw) {
-            return style.archiveSwatchColor.opacity(0.75)
-        }
+    private func fillColor(isFuture: Bool, available: Bool) -> Color {
         if isFuture {
             return .clear
         }
-        return generatable ? Color.secondary.opacity(0.15) : Color.secondary.opacity(0.06)
+        return available ? Color.blue.opacity(0.75) : Color.secondary.opacity(0.06)
     }
 
-    private func handleTap(date: Date, entry: ArchiveEntry?, isFuture: Bool, generatable: Bool) {
+    private func handleTap(date: Date, isFuture: Bool, available: Bool) {
         guard !isFuture else { return }
-        if entry != nil || generatable {
+        if available {
             selection = DateSelection(date: date)
         } else {
             showUnavailableAlert = true
@@ -185,24 +180,5 @@ struct CalendarArchiveView: View {
         formatter.dateFormat = "yyyy年M月"
         formatter.locale = Locale(identifier: "ja_JP")
         return formatter.string(from: displayedMonth)
-    }
-}
-
-/// アーカイブのカレンダー上で「その日どのスタイルの模様が生成済みか」をひと目で分かるように
-/// 添える簡易的な色。動画からサムネイルを切り出すような凝った実装はせず、スタイルごとに
-/// 固定の色を割り当てるだけの軽量な表現にとどめる。
-private extension PatternStyle {
-    var archiveSwatchColor: Color {
-        switch self {
-        case .tiling: return .orange
-        case .spirograph: return .purple
-        case .waves: return .blue
-        case .fractal: return .green
-        case .voronoi: return .yellow
-        case .lissajous: return .pink
-        case .truchet: return .teal
-        case .moire: return .indigo
-        case .flower: return .mint
-        }
     }
 }

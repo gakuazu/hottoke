@@ -117,11 +117,13 @@ enum DailyRingRenderer {
         for kind in DailyRingLayout.ringOrder {
             let c = DailyRingLayout.ringColor(for: kind)
             let r = CGFloat(c.r), g = CGFloat(c.g), b = CGFloat(c.b)
+            // 静止は帯が広く点が非常に多いので、他の輪より控えめにして白飛びを防ぐ。
+            let alphaScale: CGFloat = kind == .stationary ? 0.6 : 1.0
             let kindDots = dots.filter { $0.kind == kind }
             guard !kindDots.isEmpty else { continue }
 
             // やわらかい光のにじみ（大きく薄い円）
-            ctx.setFillColor(red: r, green: g, blue: b, alpha: 0.05)
+            ctx.setFillColor(red: r, green: g, blue: b, alpha: 0.05 * alphaScale)
             for dot in kindDots {
                 let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
                 let rad = baseRadius * CGFloat(dot.size) * 2.6
@@ -131,7 +133,7 @@ enum DailyRingRenderer {
             for dot in kindDots {
                 let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
                 let rad = baseRadius * CGFloat(dot.size)
-                ctx.setFillColor(red: r, green: g, blue: b, alpha: CGFloat(dot.brightness) * 0.85)
+                ctx.setFillColor(red: r, green: g, blue: b, alpha: CGFloat(dot.brightness) * 0.85 * alphaScale)
                 ctx.fillEllipse(in: CGRect(x: p.x - rad, y: p.y - rad, width: rad * 2, height: rad * 2))
             }
         }

@@ -139,6 +139,17 @@ final class DailyRingLayoutTests: XCTestCase {
         XCTAssertTrue(DailyRingLayout.makeDots(density: density, seed: 1).isEmpty)
     }
 
+    // MARK: - アーカイブ（端末に残っている履歴の範囲）
+
+    func testRetentionWindowIsLast7DaysIncludingToday() {
+        let now = date(2026, 9, 19, 9, 0)
+        XCTAssertTrue(DailyRingLayout.isWithinRetention(date: date(2026, 9, 19), now: now, calendar: calendar))
+        XCTAssertTrue(DailyRingLayout.isWithinRetention(date: date(2026, 9, 13), now: now, calendar: calendar)) // 6日前
+        XCTAssertFalse(DailyRingLayout.isWithinRetention(date: date(2026, 9, 12), now: now, calendar: calendar)) // 7日前
+        XCTAssertFalse(DailyRingLayout.isWithinRetention(date: date(2026, 8, 1), now: now, calendar: calendar))
+        XCTAssertFalse(DailyRingLayout.isWithinRetention(date: date(2026, 9, 20), now: now, calendar: calendar), "未来の日は対象外")
+    }
+
     // MARK: - 点の数（分数に比例）・輪の中に収まる
 
     func testDotsStayInsideTheirRingBand() {

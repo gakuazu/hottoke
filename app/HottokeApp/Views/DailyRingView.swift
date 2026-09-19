@@ -1,26 +1,54 @@
 import SwiftUI
 
-/// 「1日の輪」の画像を作って持っておく。画面を開いたとき・アプリを前面に戻したとき・更新ボタンを
-/// 押したときに、最新の活動データ（歩数・活動区間）を取り直して描き直す。
+/// 「1日の輪」（点描リング）の画像を作って持っておく。
+/// ・`date`がnil = 今日。開いたとき／前面に戻したとき／更新ボタンで最新の活動データを取り直して描き直す。
+/// ・`date`が過去日 = アーカイブ。その日の24時間ぶんを描く。端末の活動履歴の保持期間（直近約7日）を
+///   過ぎている日は取得せず「データなし」を示す。
 @MainActor
 final class DailyRingStore: ObservableObject {
     @Published private(set) var image: UIImage?
     @Published private(set) var isLoading = false
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var stepCount: Int = 0
-    @Published private(set) var errorMessage: String?
+    /// 画像を作れない理由（過去日で端末にデータが残っていない等）。nilなら画像あり（または準備中）。
+    @Published private(set) var noDataMessage: String?
+
+    let date: Date?
+    var isToday: Bool { date == nil }
 
     private let service = ActivityDataService()
+
+    init(date: Date? = nil) {
+        self.date = date
+    }
 
     /// 最新データを取得して描き直す。すでに取得中なら何もしない。
     func refresh() async {
         guard !isLoading else { return }
         isLoading = true
-        errorMessage = nil
+        noDataMessage = nil
         defer { isLoading = false }
 
         let now = Date()
-        let data = await service.fetch(for: now, includeHourlySteps: true)
+        let target = date ?? now
+
+        if !isToday && !DailyRingLayout.isWithinRetention(date: target, now: now) {
+            image = nil
+            stepCount = 0
+            lastUpdated = now
+            noDataMessage = "この日のデータは端末に残っていません。iPhoneが保持している歩数・活動の履歴は、おおむね直近1週間ほどです。"
+            return
+        }
+
+        let data = await service.fetch(for: target, includeHourlySteps: true)
+        if !isToday && data.stepCount == 0 && data.segments.isEmpty {
+            image = nil
+            stepCount = 0
+            lastUpdated = now
+            noDataMessage = "この日の歩数・活動のデータがありません。"
+            return
+        }
+
         let rendered = await Task.detached(priority: .userInitiated) { () -> UIImage in
             let density = DailyRingLayout.makeDensity(data: data, now: now)
             return DailyRingRenderer.render(density: density, date: data.date)
@@ -32,82 +60,58 @@ final class DailyRingStore: ObservableObject {
     }
 }
 
-/// 「1日の輪」画面。円の一周が1日（0時が真上・時計回り）、中心から遠いほど活動が多く、
-/// 模様の種類が活動の種類を表す（docs/22-app1-radial-redesign.md）。
-struct DailyRingView: View {
-    @StateObject private var store = DailyRingStore()
-    @Environment(\.scenePhase) private var scenePhase
+/// 画像・保存ボタン・更新ボタン・読み方の凡例。「今日」タブとアーカイブの日付シートで共通。
+struct DailyRingPanel: View {
+    @ObservedObject var store: DailyRingStore
     @State private var showSavedBanner = false
     @State private var saveErrorMessage: String?
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 16) {
-                    ringArea
-                        .aspectRatio(1, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 24))
-                        .padding(.horizontal, 16)
-
-                    statusLine
-
-                    VStack(spacing: 12) {
-                        Button {
-                            Task { await save() }
-                        } label: {
-                            Label("カメラロールに保存", systemImage: "square.and.arrow.down")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(store.image == nil || store.isLoading)
-
-                        Button {
-                            Task { await store.refresh() }
-                        } label: {
-                            Label("最新のデータで更新", systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(store.isLoading)
-                    }
+        ScrollView {
+            VStack(spacing: 16) {
+                ringArea
+                    .aspectRatio(1, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 24))
                     .padding(.horizontal, 16)
 
-                    if showSavedBanner {
-                        Text("カメラロールに保存しました")
-                            .font(.footnote)
-                            .foregroundStyle(.green)
-                    }
-                    if let saveErrorMessage {
-                        Text(saveErrorMessage)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
+                statusLine
 
-                    legend
-                        .padding(.horizontal, 16)
-                }
-                .padding(.vertical, 16)
-            }
-            .navigationTitle("1日の輪")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                VStack(spacing: 12) {
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        Label("カメラロールに保存", systemImage: "square.and.arrow.down")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(store.image == nil || store.isLoading)
+
                     Button {
                         Task { await store.refresh() }
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        Label("最新のデータで更新", systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.bordered)
                     .disabled(store.isLoading)
                 }
+                .padding(.horizontal, 16)
+
+                if showSavedBanner {
+                    Text("カメラロールに保存しました")
+                        .font(.footnote)
+                        .foregroundStyle(.green)
+                }
+                if let saveErrorMessage {
+                    Text(saveErrorMessage)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+
+                legend
+                    .padding(.horizontal, 16)
             }
-            // 画面を開いたとき（別のタブから戻ったときも含む）に最新データで描き直す。
-            .task {
-                await store.refresh()
-            }
-            // アプリを前面に戻したときも描き直す。
-            .onChange(of: scenePhase) { _, newPhase in
-                guard newPhase == .active else { return }
-                Task { await store.refresh() }
-            }
+            .padding(.vertical, 16)
         }
     }
 
@@ -119,6 +123,18 @@ struct DailyRingView: View {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFit()
+            } else if let message = store.noDataMessage {
+                VStack(spacing: 8) {
+                    Image(systemName: "moon.zzz")
+                        .font(.title)
+                    Text("データなし")
+                        .font(.headline)
+                    Text(message)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                }
+                .foregroundStyle(.white.opacity(0.7))
+                .padding(24)
             } else if !store.isLoading {
                 Text("1日の輪を準備中です")
                     .foregroundStyle(.white.opacity(0.6))
@@ -142,13 +158,15 @@ struct DailyRingView: View {
 
     @ViewBuilder
     private var statusLine: some View {
-        if let updated = store.lastUpdated {
+        if let updated = store.lastUpdated, store.image != nil {
             VStack(spacing: 2) {
-                Text("今日の歩数: \(store.stepCount)歩")
+                Text("\(store.isToday ? "今日" : "この日")の歩数: \(store.stepCount)歩")
                     .font(.headline)
-                Text("\(Self.timeFormatter.string(from: updated)) 時点のデータ")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if store.isToday {
+                    Text("\(Self.timeFormatter.string(from: updated)) 時点のデータ")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
         }
     }
@@ -212,6 +230,37 @@ struct DailyRingView: View {
             showSavedBanner = false
         } catch {
             saveErrorMessage = "保存に失敗しました: \(error.localizedDescription)"
+        }
+    }
+}
+
+/// 「今日」タブ。今日の点描リングを表示する。画面を開いたとき（別のタブから戻ったときも含む）・
+/// アプリを前面に戻したとき・更新ボタンを押したときに、最新の活動データで描き直す。
+struct DailyRingView: View {
+    @StateObject private var store = DailyRingStore()
+    @Environment(\.scenePhase) private var scenePhase
+
+    var body: some View {
+        NavigationStack {
+            DailyRingPanel(store: store)
+                .navigationTitle("今日")
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button {
+                            Task { await store.refresh() }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .disabled(store.isLoading)
+                    }
+                }
+                .task {
+                    await store.refresh()
+                }
+                .onChange(of: scenePhase) { _, newPhase in
+                    guard newPhase == .active else { return }
+                    Task { await store.refresh() }
+                }
         }
     }
 }

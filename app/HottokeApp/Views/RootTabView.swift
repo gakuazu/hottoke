@@ -1,17 +1,14 @@
 import SwiftUI
 
-/// docs/03-design.md の4タブ構成（今日/手動/アーカイブ/設定）。
-/// アーカイブタブはdocs/02-spec.md 2章#6として当初v2見送りだったが、オーナーの明示的な
-/// 依頼によりMVPに組み込んだ（docs/04-build-log.md参照）。
+/// タブ構成（今日 / アーカイブ / 設定）。
+/// 2026-09-19の方針変更で、「今日」は点描リング「1日の輪」に置き換え、数学模様（万華鏡）の手動モードと
+/// 動画の「今日の模様」（TodayView）はタブから外した。TodayView / ManualModeView と
+/// 万華鏡・動画書き出しのコードは、復活しやすいよう削除せず残してある。
 struct RootTabView: View {
     var body: some View {
         TabView {
-            TodayView()
-                .tabItem { Label("今日", systemImage: "sparkles") }
             DailyRingView()
-                .tabItem { Label("1日の輪", systemImage: "circle.dashed") }
-            ManualModeView()
-                .tabItem { Label("手動", systemImage: "hand.draw") }
+                .tabItem { Label("今日", systemImage: "circle.dotted") }
             CalendarArchiveView()
                 .tabItem { Label("アーカイブ", systemImage: "calendar") }
             SettingsView()

@@ -13,7 +13,7 @@ struct SettingsView: View {
                     LabeledContent("モーション & フィットネス", value: motionStatusText)
                 }
                 Section("サブスクリプション") {
-                    Text("PROプラン（アーカイブ・追加パレット・4K書き出し）は準備中です。実際の購入はまだできません。")
+                    Text("PROプラン（追加機能）は準備中です。実際の購入はまだできません。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     LabeledContent("現在のプラン", value: "無料プラン")
@@ -24,7 +24,7 @@ struct SettingsView: View {
                     LabeledContent("バージョン", value: appVersion)
                 }
                 Section {
-                    Text("活動データは模様の生成のためだけに端末内で使われ、外部へ送信されることはありません。")
+                    Text("活動データは「1日の輪」を作るためだけに端末内で使われ、外部へ送信されることはありません。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -43,7 +43,7 @@ struct SettingsView: View {
         case .authorized: motionStatusText = "許可済み"
         case .denied: motionStatusText = "拒否"
         case .restricted: motionStatusText = "制限あり"
-        case .notDetermined: motionStatusText = "未確認（今日の模様を生成すると確認されます）"
+        case .notDetermined: motionStatusText = "未確認（「今日」タブを開くと確認されます）"
         @unknown default: motionStatusText = "不明"
         }
     }
