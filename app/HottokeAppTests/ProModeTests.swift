@@ -70,6 +70,33 @@ final class ProModeTests: XCTestCase {
         XCTAssertNotEqual(RingTheme.aurora.color(for: .walking), RingTheme.standard.color(for: .walking))
     }
 
+    /// 活動ごとの色は、どのテーマでも互いに十分離れている（同色系にならない）。
+    func testKindColorsAreFarApartInEveryTheme() {
+        for theme in RingTheme.allCases {
+            let kinds = DailyRingLayout.kindOrder
+            var minDistance = Double.infinity
+            for i in 0..<kinds.count {
+                for j in (i + 1)..<kinds.count {
+                    let d = theme.color(for: kinds[i]).perceptualDistance(to: theme.color(for: kinds[j]))
+                    minDistance = min(minDistance, d)
+                    XCTAssertGreaterThanOrEqual(d, 30, "\(theme.displayName)の\(kinds[i].displayName)と\(kinds[j].displayName)の色が近い(ΔE=\(d))")
+                }
+            }
+            XCTAssertGreaterThanOrEqual(minDistance, 30)
+            // 睡眠は静止より十分に暗い（明度差でも区別できる）
+            XCTAssertGreaterThan(theme.color(for: .stationary).lab.l - theme.color(for: .sleeping).lab.l, 20, "\(theme.displayName)で睡眠が暗くない")
+        }
+    }
+
+    func testPerceptualDistanceBasics() {
+        let white = RingRGB(r: 1, g: 1, b: 1), black = RingRGB(r: 0, g: 0, b: 0)
+        XCTAssertEqual(white.lab.l, 100, accuracy: 0.5)
+        XCTAssertEqual(black.lab.l, 0, accuracy: 0.5)
+        XCTAssertEqual(white.perceptualDistance(to: white), 0, accuracy: 1e-9)
+        XCTAssertEqual(white.perceptualDistance(to: black), 100, accuracy: 1)
+        XCTAssertEqual(white.perceptualDistance(to: black), black.perceptualDistance(to: white), accuracy: 1e-9)
+    }
+
     func testThemeIsLockedToStandardWhenProIsOff() {
         XCTAssertEqual(RingTheme.effective(rawValue: "aurora", proEnabled: true), .aurora)
         XCTAssertEqual(RingTheme.effective(rawValue: "aurora", proEnabled: false), .standard)

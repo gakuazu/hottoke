@@ -43,38 +43,45 @@ enum RingTheme: String, CaseIterable, Identifiable {
     }
 
     /// 活動の種類ごとの色。
+    /// テーマで変えるのは「背景・明るさ・彩度・質感」で、活動ごとの色相はどのテーマでも互いに十分離す
+    /// （おおむね 黄〜橙 / 緑 / 青 / 紫 / 赤〜ピンク に散らし、睡眠は暗い藍にして静止の明るい青と明度差で区別する）。
+    /// どのテーマでも6色のどの2色も、知覚的な色差（CIE76のΔE）が30以上になるようにしてある（テストで確認）。
     func color(for kind: ActivityKind) -> RingRGB {
         let hex: String
         switch (self, DailyRingLayout.ringKind(for: kind)) {
         case (.standard, _): return DailyRingLayout.ringColor(for: kind)
 
-        case (.nightSky, .stationary): hex = "#7a9cff"
-        case (.nightSky, .sleeping): hex = "#3346b8"
-        case (.nightSky, .walking): hex = "#9fe3ff"
-        case (.nightSky, .running): hex = "#ffe08a"
-        case (.nightSky, .cycling): hex = "#c9b6ff"
-        case (.nightSky, _): hex = "#e6eeff"
+        // 夜空: 淡く冷たいパステル寄り
+        case (.nightSky, .stationary): hex = "#84b0ff"
+        case (.nightSky, .sleeping): hex = "#3238a0"
+        case (.nightSky, .walking): hex = "#6fe6d2"
+        case (.nightSky, .running): hex = "#ff8fb4"
+        case (.nightSky, .cycling): hex = "#ffdc8a"
+        case (.nightSky, _): hex = "#e2a4ff"
 
-        case (.aurora, .stationary): hex = "#3aa6ff"
-        case (.aurora, .sleeping): hex = "#4a34b8"
-        case (.aurora, .walking): hex = "#3dffb0"
-        case (.aurora, .running): hex = "#ff6fd8"
-        case (.aurora, .cycling): hex = "#eaff7a"
-        case (.aurora, _): hex = "#a878ff"
+        // オーロラ: 彩度の高いネオン
+        case (.aurora, .stationary): hex = "#2fa8ff"
+        case (.aurora, .sleeping): hex = "#4a2ab8"
+        case (.aurora, .walking): hex = "#3dffa0"
+        case (.aurora, .running): hex = "#ff4fd0"
+        case (.aurora, .cycling): hex = "#eaff5a"
+        case (.aurora, _): hex = "#c08cff"
 
-        case (.summerFestival, .stationary): hex = "#ff8a5c"
-        case (.summerFestival, .sleeping): hex = "#9a2f78"
-        case (.summerFestival, .walking): hex = "#ffd24a"
-        case (.summerFestival, .running): hex = "#ff4f6a"
-        case (.summerFestival, .cycling): hex = "#ffa02e"
-        case (.summerFestival, _): hex = "#5fd8ff"
+        // 夏祭り: 提灯のような暖かく濃い色（暖色を広めに使いつつ、青・緑・紫で色相を離す）
+        case (.summerFestival, .stationary): hex = "#ff8a3d"
+        case (.summerFestival, .sleeping): hex = "#7a1f6b"
+        case (.summerFestival, .walking): hex = "#3de0c8"
+        case (.summerFestival, .running): hex = "#ff3d6e"
+        case (.summerFestival, .cycling): hex = "#ffe14a"
+        case (.summerFestival, _): hex = "#6a8dff"
 
-        case (.moonlight, .stationary): hex = "#8a95c4"
-        case (.moonlight, .sleeping): hex = "#4a5388"
-        case (.moonlight, .walking): hex = "#d5dcff"
-        case (.moonlight, .running): hex = "#ffd89a"
-        case (.moonlight, .cycling): hex = "#a9b6e8"
-        case (.moonlight, _): hex = "#6f79a5"
+        // 月光: 彩度を抑えた落ち着いた色（色相は離したまま）
+        case (.moonlight, .stationary): hex = "#5f8ae8"
+        case (.moonlight, .sleeping): hex = "#3a3c78"
+        case (.moonlight, .walking): hex = "#7fd6b4"
+        case (.moonlight, .running): hex = "#e88fa8"
+        case (.moonlight, .cycling): hex = "#e6c27a"
+        case (.moonlight, _): hex = "#d8a0f0"
         }
         return DailyRingLayout.rgb(hex: hex)
     }
@@ -101,5 +108,25 @@ enum RingTheme: String, CaseIterable, Identifiable {
         case .summerFestival: return RingRGB(r: 0.78, g: 0.70, b: 0.66)
         default: return RingRGB(r: 0.62, g: 0.72, b: 0.90)
         }
+    }
+}
+
+extension RingRGB {
+    /// CIE L*a*b*（D65）。知覚的な色の違いを測るのに使う。
+    var lab: (l: Double, a: Double, b: Double) {
+        func linear(_ c: Double) -> Double { c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4) }
+        let rl = linear(r), gl = linear(g), bl = linear(b)
+        let x = (0.4124 * rl + 0.3576 * gl + 0.1805 * bl) / 0.95047
+        let y = 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
+        let z = (0.0193 * rl + 0.1192 * gl + 0.9505 * bl) / 1.08883
+        func f(_ t: Double) -> Double { t > 0.008856 ? pow(t, 1.0 / 3.0) : 7.787 * t + 16.0 / 116.0 }
+        return (116 * f(y) - 16, 500 * (f(x) - f(y)), 200 * (f(y) - f(z)))
+    }
+
+    /// 知覚的な色差（CIE76のΔE）。30以上なら、並べてはっきり別の色と分かる目安。
+    func perceptualDistance(to other: RingRGB) -> Double {
+        let p = lab, q = other.lab
+        let dl = p.l - q.l, da = p.a - q.a, db = p.b - q.b
+        return (dl * dl + da * da + db * db).squareRoot()
     }
 }

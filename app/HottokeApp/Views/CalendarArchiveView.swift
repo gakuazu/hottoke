@@ -138,6 +138,8 @@ struct CalendarArchiveView: View {
                             .scaledToFill()
                             .frame(width: 44, height: 44)
                             .clipShape(Circle())
+                            // サムネイルを少し暗くして、日付の数字が白い点に埋もれないようにする
+                            .overlay(Circle().fill(Color.black.opacity(0.28)))
                     } else {
                         Circle()
                             .fill(fillColor(isFuture: isFuture, available: available))
@@ -148,16 +150,33 @@ struct CalendarArchiveView: View {
                             .stroke(Color.accentColor, lineWidth: 2)
                             .frame(width: 44, height: 44)
                     }
-                    Text("\(calendar.component(.day, from: date))")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(isFuture ? Color.secondary.opacity(0.4) : .white.opacity(thumbnail == nil ? 1 : 0.8))
-                        .shadow(color: .black.opacity(0.8), radius: 2)
+                    dayNumber(calendar.component(.day, from: date), hasThumbnail: thumbnail != nil, isFuture: isFuture, isToday: isToday)
                 }
             }
             .disabled(isFuture)
             .frame(maxWidth: .infinity)
         } else {
             Color.clear.frame(width: 44, height: 44).frame(maxWidth: .infinity)
+        }
+    }
+
+    /// 日付の数字。サムネイルがあるときは、白い点と重なっても読めるよう、暗い半透明のカプセルの上に
+    /// 置いてセルの下寄りに出す。サムネイルがない日（データなし・未来）は、丸の色の上にそのまま出す。
+    /// 今日は数字をアクセント色にして目立たせる。ライト/ダークどちらでも、カプセルは常に暗色・数字は明色なので読める。
+    @ViewBuilder
+    private func dayNumber(_ day: Int, hasThumbnail: Bool, isFuture: Bool, isToday: Bool) -> some View {
+        if hasThumbnail {
+            Text("\(day)")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(isToday ? Color.yellow : Color.white)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(Capsule().fill(Color.black.opacity(0.72)))
+                .offset(y: 13)
+        } else {
+            Text("\(day)")
+                .font(.footnote.weight(isToday ? .bold : .regular))
+                .foregroundStyle(isFuture ? Color.secondary.opacity(0.5) : (isToday ? Color.accentColor : Color.primary))
         }
     }
 
