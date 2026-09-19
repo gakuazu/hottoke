@@ -60,7 +60,7 @@ enum DailyRingLayout {
     /// 点の半径（最大半径を1とした割合）。1080px画像で約1.6px（基準。実際は中心ほど小さく外縁ほど大きい）。
     static let dotRadiusFraction: Double = 0.0038
     /// 密度1（その時間ずっと何かをしていた）のとき、面積をどれだけ点で埋めるか。
-    static let packingFill: Double = 1.0
+    static let packingFill: Double = 0.85
 
     /// 活動の種類（凡例・色の割り当ての順序）。
     static let kindOrder: [ActivityKind] = [.stationary, .walking, .running, .cycling, .automotive]
@@ -68,9 +68,9 @@ enum DailyRingLayout {
     /// 中心の空洞の半径（最大半径を1とした割合）。点はこの外側から始まる。
     static let cavityRadius: Double = 0.14
     /// 強さ0（静止）のときの外側の半径。空洞のすぐ外に薄く見える程度。
-    static let minimumOuterRadius: Double = 0.30
-    /// 強さ→半径の飽和の速さ（歩/分）。1 - exp(-強さ/100)。30歩/分で約26%、100歩/分で約63%、160歩/分で約80%。
-    static let intensityScale: Double = 100
+    static let minimumOuterRadius: Double = 0.27
+    /// 強さ→半径の飽和の速さ（歩/分）。1 - exp(-強さ/70)。20歩/分で約25%、60歩/分で約58%、120歩/分で約82%。
+    static let intensityScale: Double = 70
     /// 自転車は1分あたり何歩ぶんの強さとみなすか（歩数計にほとんど出ないため）。
     static let cyclingStepsPerMinute: Double = 90
     /// 車移動は自分の運動量ではないので、歩行より小さめ（1分あたり30歩相当）。
@@ -80,7 +80,7 @@ enum DailyRingLayout {
     /// 1分あたり歩数の上限（走行でもこれ以上は同じ強さとみなす）。
     static let maximumCadence: Double = 200
     /// 強さの目安の円（弱・中・強）の歩/分。
-    static let guideIntensities: [(label: String, stepsPerMinute: Double)] = [("弱", 30), ("中", 90), ("強", 160)]
+    static let guideIntensities: [(label: String, stepsPerMinute: Double)] = [("弱", 20), ("中", 60), ("強", 120)]
 
     /// 歩数を加味する係数の下限（歩数が少ない歩行・走行でも、この割合の濃さは出す）。
     static let minimumStepFactor: Double = 0.6

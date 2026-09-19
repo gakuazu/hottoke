@@ -194,9 +194,9 @@ enum DailyRingRenderer {
         for dot in dots where dot.role != .bokeh {
             let base = DailyRingLayout.ringColor(for: dot.kind)
             // 中心に近いほど濃く深い色、外縁ほど白に近づく（発光の芯）。
-            let whiten = 0.10 + 0.50 * pow(dot.depth, 2.2) * dot.brightness
+            let whiten = 0.04 + 0.34 * pow(dot.depth, 2.4) * dot.brightness
             let c = lighten(base, whiten)
-            let alphaScale: CGFloat = dot.kind == .stationary ? 0.6 : 1.0
+            let alphaScale: CGFloat = dot.kind == .stationary ? 0.5 : 1.0
             let p = point(hour: dot.hour, radius: rMax * CGFloat(dot.radius), center: center)
             let rad = baseRadius * CGFloat(dot.size)
 
@@ -206,7 +206,7 @@ enum DailyRingRenderer {
                 ctx.setFillColor(red: c.r, green: c.g, blue: c.b, alpha: 0.06 * alphaScale * CGFloat(dot.brightness))
                 ctx.fillEllipse(in: CGRect(x: p.x - haloRad, y: p.y - haloRad, width: haloRad * 2, height: haloRad * 2))
             }
-            ctx.setFillColor(red: c.r, green: c.g, blue: c.b, alpha: CGFloat(dot.brightness) * 0.9 * alphaScale)
+            ctx.setFillColor(red: c.r, green: c.g, blue: c.b, alpha: CGFloat(dot.brightness) * 0.82 * alphaScale)
             ctx.fillEllipse(in: CGRect(x: p.x - rad, y: p.y - rad, width: rad * 2, height: rad * 2))
         }
 
@@ -246,9 +246,9 @@ enum DailyRingRenderer {
         ctx.setLineCap(.round)
         ctx.setLineJoin(.round)
         let passes: [(width: CGFloat, alpha: CGFloat, whiten: Double)] = [
-            (9, 0.05, 0.0),
-            (3.2, 0.13, 0.15),
-            (1.1, 0.42, 0.45)
+            (9, 0.04, 0.0),
+            (3.2, 0.10, 0.10),
+            (1.1, 0.30, 0.30)
         ]
         for pass in passes {
             ctx.setLineWidth(pass.width)
@@ -269,7 +269,7 @@ enum DailyRingRenderer {
         let radius = rMax * CGFloat(DailyRingLayout.cavityRadius) * 1.9
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
-        if let g = gradient(0.75, 0.82, 1.0, 0.22) {
+        if let g = gradient(0.75, 0.82, 1.0, 0.10) {
             ctx.drawRadialGradient(g, startCenter: center, startRadius: 0, endCenter: center, endRadius: radius, options: [])
         }
         ctx.restoreGState()
