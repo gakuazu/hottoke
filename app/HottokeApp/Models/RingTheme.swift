@@ -69,12 +69,12 @@ enum RingTheme: String, CaseIterable, Identifiable {
         case (.summerFestival, .cycling): hex = "#ffa02e"
         case (.summerFestival, _): hex = "#5fd8ff"
 
-        case (.moonlight, .stationary): hex = "#9aa6d0"
-        case (.moonlight, .sleeping): hex = "#525c88"
-        case (.moonlight, .walking): hex = "#eef0ff"
-        case (.moonlight, .running): hex = "#ffe7b0"
-        case (.moonlight, .cycling): hex = "#b9c6ec"
-        case (.moonlight, _): hex = "#7d86ad"
+        case (.moonlight, .stationary): hex = "#8a95c4"
+        case (.moonlight, .sleeping): hex = "#4a5388"
+        case (.moonlight, .walking): hex = "#d5dcff"
+        case (.moonlight, .running): hex = "#ffd89a"
+        case (.moonlight, .cycling): hex = "#a9b6e8"
+        case (.moonlight, _): hex = "#6f79a5"
         }
         return DailyRingLayout.rgb(hex: hex)
     }

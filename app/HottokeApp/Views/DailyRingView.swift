@@ -226,6 +226,8 @@ final class DailyRingStore: ObservableObject {
         options.ghost = built.ghost
         if size == .wallpaper {
             options.chrome = .art
+            // 壁紙は輪を大きく（画面の幅いっぱいに）描く。
+            options.ringSide = min(canvas.width, canvas.height) * 1.35
             options.ringCenter = CGPoint(x: canvas.width / 2, y: canvas.height * 0.54)
         } else {
             options.caption = built.caption

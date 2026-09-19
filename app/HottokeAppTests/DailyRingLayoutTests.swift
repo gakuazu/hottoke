@@ -482,6 +482,7 @@ final class DailyRingLayoutTests: XCTestCase {
         // 壁紙サイズ（iPhoneの画面の比率）
         var wallpaper = RingRenderOptions(canvas: CGSize(width: 1179, height: 2556))
         wallpaper.chrome = .art
+        wallpaper.ringSide = 1179 * 1.35
         wallpaper.ringCenter = CGPoint(x: 1179 / 2, y: 2556 * 0.54)
         try writePNG(DailyRingRenderer.render(density: DailyRingLayout.aggregate(weekRecords), date: base, options: wallpaper, calendar: calendar), "ring-wallpaper-week.png")
 

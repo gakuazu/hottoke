@@ -16,8 +16,8 @@ enum ReportRenderer {
         let seedDate = date(fromKey: report.startKey) ?? Date()
 
         var options = RingRenderOptions(canvas: canvas)
-        options.ringSide = 1000
-        options.ringCenter = CGPoint(x: canvas.width / 2, y: 650)
+        options.ringSide = 1040
+        options.ringCenter = CGPoint(x: canvas.width / 2, y: 655)
         options.theme = theme
         options.chrome = .ringOnly
 
