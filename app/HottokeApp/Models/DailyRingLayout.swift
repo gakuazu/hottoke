@@ -46,7 +46,7 @@ enum DailyRingLayout {
 
     static let hoursPerDay: Double = 24
     /// 静かな時間帯でも「空白」にならないための最小半径（最大半径を1とした割合）。
-    static let minRadiusFraction: Double = 0.10
+    static let minRadiusFraction: Double = 0.16
     /// 半径の飽和の速さ。1 - exp(-歩数/1800)。1800歩で約63%、3000歩で約81%、5000歩で約94%。
     static let stepsScale: Double = 1800
     /// 自転車は1分あたり何歩ぶんの活動量とみなすか（歩数計にほとんど出ないため）。

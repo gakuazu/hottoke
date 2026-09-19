@@ -28,14 +28,15 @@ enum DailyRingRenderer {
     )
 
     /// 活動種別ごとの模様の細かさ・周期パラメータ。
-    private static func patternSettings(for style: PatternStyle) -> (detail: Double, symmetryCount: Int) {
+    /// `gain`は細い線の模様が暗くなりすぎないための濃さの補正（線が細いスタイルほど大きく）。
+    private static func patternSettings(for style: PatternStyle) -> (detail: Double, symmetryCount: Int, gain: Double) {
         switch style {
-        case .fractal: return (0.85, 1)      // 円全体に幹を広げるため周期1
-        case .spirograph: return (0.8, 3)
-        case .waves: return (0.7, 3)
-        case .tiling: return (0.6, 3)
-        case .lissajous: return (0.8, 3)
-        default: return (0.6, 3)
+        case .fractal: return (0.85, 1, 2.6)      // 円全体に幹を広げるため周期1
+        case .spirograph: return (0.8, 3, 1.6)
+        case .waves: return (0.7, 3, 1.8)
+        case .tiling: return (0.6, 3, 1.4)
+        case .lissajous: return (0.8, 3, 2.0)
+        default: return (0.6, 3, 1.5)
         }
     }
 
@@ -71,7 +72,7 @@ enum DailyRingRenderer {
             if profile.isPartialDay {
                 drawNowMarker(ctx: ctx, hour: profile.drawnHours, center: center, rMax: rMax, side: CGFloat(side))
             }
-            drawCenterGlow(ctx: ctx, center: center, radius: rMax * 0.16)
+            drawCenterGlow(ctx: ctx, center: center, radius: rMax * 0.10)
             drawLabels(ctx: ctx, profile: profile, date: date, center: center, rMax: rMax, side: CGFloat(side), calendar: calendar)
         }
     }
@@ -122,6 +123,7 @@ enum DailyRingRenderer {
             }
             layers.append(styleCache[style] ?? [])
         }
+        let gains = kinds.map { patternSettings(for: DailyRingLayout.patternStyle(for: $0)).gain }
         var kindIndex: [ActivityKind: Int] = [:]
         for (i, kind) in kinds.enumerated() { kindIndex[kind] = i }
 
@@ -146,8 +148,7 @@ enum DailyRingRenderer {
         let isPartial = profile.isPartialDay
         let cx = Double(side) / 2, cy = Double(side) / 2
         let limit = (rMaxD + 2) * (rMaxD + 2)
-        let patternGain = 1.4
-
+        
         var out = [UInt8](repeating: 0, count: side * side * 4)
         for y in 0..<side {
             let dy = Double(y) + 0.5 - cy
@@ -182,7 +183,7 @@ enum DailyRingRenderer {
                 for ki in 0..<kinds.count {
                     let w = weightLUT[ki][li]
                     if w < 0.002 { continue }
-                    let patternAlpha = min(1, Double(layers[ki][pixelIndex + 3]) / 255 * patternGain)
+                    let patternAlpha = min(1, Double(layers[ki][pixelIndex + 3]) / 255 * gains[ki])
                     let a = 1 - (1 - patternAlpha) * (1 - bodyAlpha)
                     total += w * a
                 }
@@ -354,7 +355,7 @@ enum DailyRingRenderer {
     }
 
     private static func drawCenterGlow(ctx: CGContext, center: CGPoint, radius: CGFloat) {
-        let colors = [CGColor(red: 1, green: 1, blue: 1, alpha: 0.5), CGColor(red: 1, green: 1, blue: 1, alpha: 0)]
+        let colors = [CGColor(red: 1, green: 1, blue: 1, alpha: 0.35), CGColor(red: 1, green: 1, blue: 1, alpha: 0)]
         guard let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors as CFArray, locations: [0, 1]) else { return }
         ctx.saveGState()
         ctx.setBlendMode(.plusLighter)
@@ -364,14 +365,15 @@ enum DailyRingRenderer {
 
     // MARK: - 文字（0/6/12/18時、日付）
 
-    private static func drawText(_ text: String, at center: CGPoint, fontSize: CGFloat, weight: UIFont.Weight, alpha: CGFloat) {
+    private static func drawText(_ text: String, at center: CGPoint, fontSize: CGFloat, weight: UIFont.Weight, alpha: CGFloat, leftAligned: Bool = false) {
         let attributes: [NSAttributedString.Key: Any] = [
             .font: UIFont.systemFont(ofSize: fontSize, weight: weight),
             .foregroundColor: UIColor(white: 1, alpha: alpha)
         ]
         let string = NSAttributedString(string: text, attributes: attributes)
         let size = string.size()
-        string.draw(at: CGPoint(x: center.x - size.width / 2, y: center.y - size.height / 2))
+        let x = leftAligned ? center.x : center.x - size.width / 2
+        string.draw(at: CGPoint(x: x, y: center.y - size.height / 2))
     }
 
     private static func drawLabels(ctx: CGContext, profile: DailyRingProfile, date: Date, center: CGPoint, rMax: CGFloat, side: CGFloat, calendar: Calendar) {
@@ -381,11 +383,13 @@ enum DailyRingRenderer {
         }
 
         let c = calendar.dateComponents([.year, .month, .day], from: date)
-        var label = String(format: "%04d.%d.%d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        // 日付は左上の角に（下の「12」の目盛り文字と重ならないように）。
+        drawText(String(format: "%04d.%d.%d", c.year ?? 0, c.month ?? 0, c.day ?? 0),
+                 at: CGPoint(x: side * 0.045, y: side * 0.05), fontSize: side * 0.030, weight: .medium, alpha: 0.7, leftAligned: true)
         if profile.isPartialDay {
             let totalMinutes = Int(profile.drawnHours * 60)
-            label += String(format: "  %d:%02d時点", totalMinutes / 60, totalMinutes % 60)
+            drawText(String(format: "%d:%02d 時点", totalMinutes / 60, totalMinutes % 60),
+                     at: CGPoint(x: side * 0.045, y: side * 0.05 + side * 0.040), fontSize: side * 0.024, weight: .regular, alpha: 0.5, leftAligned: true)
         }
-        drawText(label, at: CGPoint(x: center.x, y: side * 0.955), fontSize: side * 0.026, weight: .regular, alpha: 0.55)
     }
 }
