@@ -268,8 +268,8 @@ final class ProModeTests: XCTestCase {
             let image = DailyRingRenderer.render(density: density, date: date(10), options: options, calendar: calendar)
             XCTAssertEqual(image.size.width * image.scale, 180, accuracy: 0.5, "\(style.displayName)")
             XCTAssertEqual(image.size.height * image.scale, 390, accuracy: 0.5)
-            let thumb = DailyRingRenderer.renderThumbnail(slices: records[0], size: 60, style: style)
-            XCTAssertEqual(thumb.size.width, 60, accuracy: 0.5)
+            let thumb = DailyRingRenderer.renderThumbnail(slices: records[0], size: 80, style: style)
+            XCTAssertEqual(thumb.size.width, 80, accuracy: 0.5)
         }
     }
 }

@@ -206,7 +206,7 @@ enum RingArtRenderer {
         if bloom {
             out.setBlendMode(.plusLighter)
             out.interpolationQuality = .high
-            for (divisor, weight) in [(4, 0.26), (12, 0.30), (30, 0.26)] as [(Int, CGFloat)] {
+            for (divisor, weight) in [(4, 0.16), (12, 0.20), (30, 0.16)] as [(Int, CGFloat)] {
                 if let small = downscale(base, toWidth: max(8, w / divisor), height: max(8, h / divisor)) {
                     out.setAlpha(weight)
                     out.draw(small, in: CGRect(x: 0, y: 0, width: w, height: h))
@@ -220,7 +220,7 @@ enum RingArtRenderer {
         if let outData = out.data {
             let o = outData.bindMemory(to: UInt8.self, capacity: count * 4)
             let exposure = Double(ArtPainter.exposure)
-            let knee = 0.72
+            let knee = 0.66
             for i in 0..<count {
                 let r = Double(o[i * 4]), g = Double(o[i * 4 + 1]), b = Double(o[i * 4 + 2])
                 let maxc = max(r, g, b)
@@ -275,10 +275,17 @@ enum RingArtStyles {
         let n = day.count
         guard n > 0 else { return }
 
-        // 内側のほんのりした霞
-        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [p.cg(day.averageColor, 0), p.cg(day.averageColor, 0.15)] as CFArray, locations: [0, 1]) {
+        // 内側のほんのりした霞（描いた範囲だけ。今日の途中は、これからの時間に霞をかけない）
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [p.cg(day.averageColor, 0), p.cg(day.averageColor, 0.13)] as CFArray, locations: [0, 1]) {
             p.ctx.saveGState()
-            p.ctx.addEllipse(in: CGRect(x: g.cx - rIn, y: g.cy - rIn, width: rIn * 2, height: rIn * 2))
+            let sector = CGMutablePath()
+            sector.move(to: CGPoint(x: g.cx, y: g.cy))
+            let steps = max(2, Int(day.drawn * 4))
+            for k in 0...steps {
+                sector.addLine(to: g.point(hour: day.drawn * Double(k) / Double(steps), radius: rIn))
+            }
+            sector.closeSubpath()
+            p.ctx.addPath(sector)
             p.ctx.clip()
             p.ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: g.cx, y: g.cy), startRadius: rIn * 0.35, endCenter: CGPoint(x: g.cx, y: g.cy), endRadius: rIn, options: [])
             p.ctx.restoreGState()
@@ -290,7 +297,7 @@ enum RingArtStyles {
             for i in 0..<n {
                 let t0 = Double(i) * DailyRingLayout.sliceHours
                 let t1 = min(day.drawn, t0 + DailyRingLayout.sliceHours)
-                let a0 = RingArtRenderer.angle(hour: t0) - 0.002, a1 = RingArtRenderer.angle(hour: t1) + 0.002
+                let a0 = RingArtRenderer.angle(hour: t0) - 0.0006, a1 = RingArtRenderer.angle(hour: t1) + 0.0006
                 let c = p.hot(day.sliceColors[i], hot)
                 p.ctx.setStrokeColor(p.cg(c, alpha(i)))
                 p.ctx.move(to: g.point(angle: a0, radius: radius))
@@ -299,19 +306,20 @@ enum RingArtStyles {
             }
         }
 
-        for m in [3.4, 2.6, 1.9] as [CGFloat] { strokeRing(radius: rm, width: wid * m, hot: 0) { _ in 0.026 } }
-        strokeRing(radius: rm, width: wid, hot: 0) { 0.6 - 0.22 * day.sleepWeight[$0] }
-        strokeRing(radius: rOut - wid * 0.12, width: wid * 0.24, hot: 0.18) { _ in 0.55 }
-        strokeRing(radius: rIn + wid * 0.1, width: wid * 0.14, hot: 0.08) { _ in 0.30 }
+        // 幅の違う淡い帯を何枚も重ねて、なめらかな光のにじみにする（段差が見えないよう枚数を多めに）
+        for m in [1.4, 1.75, 2.1, 2.5, 2.95, 3.5] as [CGFloat] { strokeRing(radius: rm, width: wid * m, hot: 0) { _ in 0.011 } }
+        strokeRing(radius: rm, width: wid, hot: 0) { 0.5 - 0.2 * day.sleepWeight[$0] }
+        strokeRing(radius: rOut - wid * 0.12, width: wid * 0.24, hot: 0.04) { 0.34 - 0.1 * day.sleepWeight[$0] }
+        strokeRing(radius: rIn + wid * 0.1, width: wid * 0.14, hot: 0.02) { _ in 0.2 }
 
         // リングの中の光の粒
-        let count = Int(650 * day.drawn / 24)
+        let count = Int(520 * day.drawn / 24)
         for _ in 0..<count {
             let t = Double.random(in: 0..<1, using: &rng) * day.drawn
             let r = rIn + wid * CGFloat(Double.random(in: 0..<1, using: &rng))
             let radius = (1.1 + 1.6 * CGFloat(Double.random(in: 0..<1, using: &rng))) * g.u
             let a = 0.5 + 0.4 * Double.random(in: 0..<1, using: &rng)
-            p.dot(g.point(hour: t, radius: r), radius: radius, color: p.hot(day.color(at: t), 0.25), alpha: a)
+            p.dot(g.point(hour: t, radius: r), radius: radius, color: p.hot(day.color(at: t), 0.12), alpha: a * 0.7)
         }
     }
 
