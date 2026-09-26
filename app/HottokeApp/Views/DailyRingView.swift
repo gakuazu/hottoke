@@ -299,6 +299,9 @@ struct DailyRingPanel: View {
                 diaryCard
                     .padding(.horizontal, 16)
 
+                DiaryPhotoStrip(date: diaryDate)
+                    .padding(.horizontal, 16)
+
                 statusLine
 
                 if let note = store.summaryNote {
@@ -369,7 +372,7 @@ struct DailyRingPanel: View {
             }
             .padding(.vertical, 16)
         }
-        .task(id: diaryDate) { loadDiary() }
+        .task(id: diaryDate) { await loadDiaryAndSuggestIfEmpty() }
         .sheet(isPresented: $showEmojiPicker) {
             EmojiPickerSheet(selected: diaryEmoji) { picked in
                 diaryEmoji = picked
@@ -385,10 +388,19 @@ struct DailyRingPanel: View {
         Calendar.current.startOfDay(for: store.date ?? Date())
     }
 
-    private func loadDiary() {
+    /// 保存済みの記録を読み込み、まだ何も書いていなければ「GPS自動日記」のデフォルトの
+    /// 下書きを提案する（すでに書いていれば上書きしない）。
+    private func loadDiaryAndSuggestIfEmpty() async {
         let note = DiaryNoteStore.shared.note(for: diaryDate)
         diaryText = note?.text ?? ""
         diaryEmoji = note?.emoji
+        guard diaryText.isEmpty else { return }
+
+        guard let suggested = await LocationDiaryService.shared.suggestedText(for: diaryDate) else { return }
+        // 提案の生成中にユーザーがすでに書き始めていたら、上書きしない。
+        guard diaryText.isEmpty else { return }
+        diaryText = suggested
+        saveDiary()
     }
 
     private func saveDiary() {

@@ -14,5 +14,9 @@ struct RootTabView: View {
             SettingsView()
                 .tabItem { Label("設定", systemImage: "gearshape") }
         }
+        // 起動時、設定に合わせて「GPS自動日記」の位置情報監視を開始する（オフなら何もしない）。
+        .task {
+            LocationDiaryService.shared.applySetting(enabled: LocationDiarySettings.isEnabled())
+        }
     }
 }

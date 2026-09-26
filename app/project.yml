@@ -26,6 +26,10 @@ targets:
         CFBundleDisplayName: トキノワ
         NSMotionUsageDescription: "今日の活動データから、1日の活動を点で描いた「1日の輪」の画像を作るために使います。データは端末の外へは一切送信しません。"
         NSPhotoLibraryAddUsageDescription: "作成した「1日の輪」の画像をあなたの写真ライブラリに保存するために使います。"
+        NSLocationWhenInUseUsageDescription: "その日いた場所から「ひとこと日記」の下書きを自動で作るために使います。大きく場所が変わったときだけ記録する省電力な方法を使い、常に細かく追跡することはありません。位置情報は端末の外へは一切送信されず、設定アプリの「トキノワ」またはアプリ内の設定画面からいつでもオフにできます。"
+        NSPhotoLibraryUsageDescription: "その日撮った写真を「ひとこと日記」のそばに小さく表示するために使います。写真はその場で読み込むだけで、アプリの中にコピー・保存はしません。設定画面からいつでもオフにできます。"
+        UIBackgroundModes:
+          - location
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
