@@ -1,7 +1,7 @@
 import Foundation
 
 /// 「1日の輪」の表現スタイル（docs/23-radial-art-concepts.md）。
-/// 標準は「花のコロナ」。スタイルの切り替えはプロ機能（ロック中は標準に固定）。
+/// 標準は「従来の点描の山」。スタイルの切り替えはプロ機能（ロック中は標準に固定）。
 /// 背景は暗い夜空、活動の色は標準の1セットに固定（配色テーマの選択は廃止）。
 enum RingArtStyle: String, CaseIterable, Identifiable {
     /// A+B 花のコロナ: 時間のリングから今日の活動が花びらとして外へ開き、内側に過去6日の花びらが重なる。標準。
@@ -22,7 +22,7 @@ enum RingArtStyle: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static let storageKey = "ringArtStyle"
-    static let defaultStyle: RingArtStyle = .flowerCorona
+    static let defaultStyle: RingArtStyle = .classic
 
     var displayName: String {
         switch self {

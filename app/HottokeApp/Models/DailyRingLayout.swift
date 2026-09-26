@@ -179,6 +179,16 @@ enum DailyRingLayout {
         return target >= oldest
     }
 
+    /// アーカイブでその日を開けるか（カレンダーの日付タップ・詳細画面の前日/翌日スワイプで共通に使う）。
+    /// 未来の日は不可。過去は、端末に履歴が残っていそうな日（直近`retentionDays`日）か、
+    /// すでに保存済みの記録（`hasSavedRecord`）がある日まで。
+    static func isArchiveAvailable(date: Date, hasSavedRecord: Bool, now: Date, calendar: Calendar = .current) -> Bool {
+        let today = calendar.startOfDay(for: now)
+        let target = calendar.startOfDay(for: date)
+        guard target <= today else { return false }
+        return hasSavedRecord || isWithinRetention(date: target, now: now, calendar: calendar)
+    }
+
     // MARK: - 強さ → 半径
 
     /// 強さ（1分あたりの歩数換算）→ 外側の半径の割合。単調増加。強さ0でも最小半径を持ち、1には届かない。

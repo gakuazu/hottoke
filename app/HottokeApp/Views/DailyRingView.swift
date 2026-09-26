@@ -25,7 +25,7 @@ final class DailyRingStore: ObservableObject {
 
     private(set) var proEnabled = ProAccess.defaultEnabled
     private(set) var styleRaw = RingArtStyle.defaultStyle.rawValue
-    /// 実際に使う表現スタイル（プロ機能がロック中は標準の花のコロナ）。
+    /// 実際に使う表現スタイル（プロ機能がロック中は標準の従来の点描の山）。
     var style: RingArtStyle { RingArtStyle.effective(rawValue: styleRaw, proEnabled: proEnabled) }
     /// 「普段と比べる」が使える表現か（過去の日を重ねる表現、または従来の点描）。週の年輪は常に過去の日を含む。
     var supportsCompare: Bool { (style.usesPastDays && style != .yearRings) || style == .classic }
@@ -549,7 +549,7 @@ struct DailyRingView: View {
         }
     }
 
-    /// 表現スタイルの切り替え（プロ機能）。ロック中は標準の花のコロナに固定。
+    /// 表現スタイルの切り替え（プロ機能）。ロック中は標準の従来の点描の山に固定。
     private var styleMenu: some View {
         Menu {
             ForEach(RingArtStyle.allCases) { style in

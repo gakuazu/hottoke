@@ -125,7 +125,7 @@ struct CalendarArchiveView: View {
             let isFuture = calendar.startOfDay(for: date) > calendar.startOfDay(for: Date())
             let isToday = calendar.isDateInToday(date)
             let saved = history.record(forKey: key)?.hasAnyData ?? false
-            let available = !isFuture && (saved || DailyRingLayout.isWithinRetention(date: date, now: Date(), calendar: calendar))
+            let available = DailyRingLayout.isArchiveAvailable(date: date, hasSavedRecord: saved, now: Date(), calendar: calendar)
             let thumbnail = thumbnails.images[key]
 
             Button {

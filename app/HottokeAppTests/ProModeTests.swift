@@ -77,12 +77,12 @@ final class ProModeTests: XCTestCase {
 
     // MARK: - 表現スタイル
 
-    func testArtStyleDefaultsToFlowerCoronaAndIsLockedWhenProIsOff() {
-        XCTAssertEqual(RingArtStyle.defaultStyle, .flowerCorona)
+    func testArtStyleDefaultsToClassicAndIsLockedWhenProIsOff() {
+        XCTAssertEqual(RingArtStyle.defaultStyle, .classic)
         XCTAssertEqual(RingArtStyle.allCases.count, 7)
         XCTAssertEqual(RingArtStyle.effective(rawValue: "aurora", proEnabled: true), .aurora)
-        XCTAssertEqual(RingArtStyle.effective(rawValue: "aurora", proEnabled: false), .flowerCorona, "ロック中は標準に固定")
-        XCTAssertEqual(RingArtStyle.effective(rawValue: "unknown-style", proEnabled: true), .flowerCorona)
+        XCTAssertEqual(RingArtStyle.effective(rawValue: "aurora", proEnabled: false), .classic, "ロック中は標準に固定")
+        XCTAssertEqual(RingArtStyle.effective(rawValue: "unknown-style", proEnabled: true), .classic)
         XCTAssertEqual(RingArtStyle.effective(rawValue: "classic", proEnabled: true), .classic)
         for style in RingArtStyle.allCases {
             XCTAssertFalse(style.displayName.isEmpty)

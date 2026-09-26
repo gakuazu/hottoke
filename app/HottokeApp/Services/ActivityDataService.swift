@@ -38,29 +38,48 @@ final class ActivityDataService {
         let (steps, distance, floors) = await queryPedometerTotals(from: startOfDay, to: end)
 
         var hourly = Array(repeating: 0, count: 24)
+        // 睡眠推定に使う、実際の1時間ごとの歩数（参照日時からの通し番号の時間 → 歩数）。
+        // 対象日ぶんは`hourly`と同じ問い合わせ結果を流用する（二重に取得しない）。
+        var stepsByHour: [Int: Int] = [:]
         if includeHourlySteps {
             hourly = await queryHourlySteps(startOfDay: startOfDay, until: end, calendar: calendar)
+            for hour in 0..<24 {
+                guard let hourStart = calendar.date(byAdding: .hour, value: hour, to: startOfDay) else { continue }
+                stepsByHour[Self.hourIndex(for: hourStart)] = hourly[hour]
+            }
         }
 
         // 睡眠の推定（SleepEstimator）は、前日の夜〜翌日の昼にまたがるので、対象日の前後12時間ぶんも
-        // 取得して判定し、そのあと対象日の範囲に切り落とす。前後の日の歩数は分からないので0とみなす。
+        // 取得して判定し、そのあと対象日の範囲に切り落とす。
+        //
+        // 前後の日の歩数も、その範囲だけ実際に問い合わせて使う（以前は「分からないので0」としていたが、
+        // それだと「今日」として見たとき（対象日の前を常に0扱い）と「翌日、アーカイブで見返したとき」
+        // （対象日の後ろを常に0扱い）とで同じ時間帯の扱いが食い違い、日をまたぐ睡眠の判定が
+        // 呼び出すタイミングによってぶれる原因になっていたため、実測値に揃える）。
         let segments: [ActivitySegment]
         if CMMotionActivityManager.isActivityAvailable() {
             let windowStart = startOfDay.addingTimeInterval(-12 * 3600)
             let windowEnd = min(endOfDay.addingTimeInterval(12 * 3600), now)
             let raw = windowEnd > windowStart ? await queryActivitySegments(from: windowStart, to: windowEnd) : []
-            let hourlySnapshot = hourly
-            let estimated = SleepEstimator.estimate(
-                segments: raw,
-                windowStart: windowStart,
-                windowEnd: windowEnd,
-                stepsInHour: { hourStart in
-                    let index = Int(floor(hourStart.timeIntervalSince(startOfDay) / 3600))
-                    return (0..<24).contains(index) ? hourlySnapshot[index] : 0
-                },
+
+            if includeHourlySteps {
+                if windowStart < startOfDay {
+                    let before = await queryStepsByHour(from: windowStart, to: startOfDay)
+                    stepsByHour.merge(before) { _, new in new }
+                }
+                if end < windowEnd {
+                    let after = await queryStepsByHour(from: end, to: windowEnd)
+                    stepsByHour.merge(after) { _, new in new }
+                }
+            }
+
+            segments = Self.estimateDaySegments(
+                date: date,
+                now: now,
+                rawSegments: raw,
+                hourlySteps: stepsByHour,
                 calendar: calendar
             )
-            segments = SleepEstimator.clip(estimated, from: startOfDay, to: end)
         } else {
             segments = []
         }
@@ -87,6 +106,54 @@ final class ActivityDataService {
                   let hourEnd = calendar.date(byAdding: .hour, value: hour + 1, to: startOfDay) else { continue }
             if hourStart >= end { break }
             result[hour] = await querySteps(from: hourStart, to: min(hourEnd, end))
+        }
+        return result
+    }
+
+    /// 参照日時（2001-01-01 00:00:00 UTC）から数えた通し番号の時間。日本時間には夏時間がなく、
+    /// 時差もちょうど9時間ぶんなので、カレンダーの「◯時」とこの通し番号は常に対応する
+    /// （SleepEstimatorが同じ考え方で使っている番号と揃えるためのもの）。
+    static func hourIndex(for date: Date) -> Int {
+        Int(floor(date.timeIntervalSinceReferenceDate / 3600))
+    }
+
+    /// `fetch(for:)`のうち、CoreMotionへの問い合わせを含まない部分（テストから直接呼べる）。
+    /// `date`の前後12時間ぶんの活動区間（`rawSegments`）と、分かっている範囲の実際の1時間ごとの
+    /// 歩数（`hourlySteps`、キーは`hourIndex(for:)`）から、`date`の範囲に切り落とした睡眠込みの
+    /// 活動区間を作る。歩数が分かっていない時間は0とみなす。
+    static func estimateDaySegments(
+        date: Date,
+        now: Date,
+        rawSegments: [ActivitySegment],
+        hourlySteps: [Int: Int],
+        calendar: Calendar = .current
+    ) -> [ActivitySegment] {
+        let startOfDay = calendar.startOfDay(for: date)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+        let end = min(endOfDay, now)
+        let windowStart = startOfDay.addingTimeInterval(-12 * 3600)
+        let windowEnd = min(endOfDay.addingTimeInterval(12 * 3600), now)
+        guard windowEnd > windowStart else { return [] }
+        let estimated = SleepEstimator.estimate(
+            segments: rawSegments,
+            windowStart: windowStart,
+            windowEnd: windowEnd,
+            stepsInHour: { hourStart in hourlySteps[Self.hourIndex(for: hourStart)] ?? 0 },
+            calendar: calendar
+        )
+        return SleepEstimator.clip(estimated, from: startOfDay, to: end)
+    }
+
+    /// `start`〜`end`（1時間単位でなくてよい）を1時間ごとに区切って、実際の歩数を問い合わせる。
+    /// 睡眠推定で、対象日の前後（前日の夜・翌日の朝）の実際の歩数を知るために使う。
+    private func queryStepsByHour(from start: Date, to end: Date) async -> [Int: Int] {
+        var result: [Int: Int] = [:]
+        guard CMPedometer.isStepCountingAvailable(), end > start else { return result }
+        var cursor = start
+        while cursor < end {
+            let hourEnd = min(end, cursor.addingTimeInterval(3600))
+            result[Self.hourIndex(for: cursor)] = await querySteps(from: cursor, to: hourEnd)
+            cursor = hourEnd
         }
         return result
     }

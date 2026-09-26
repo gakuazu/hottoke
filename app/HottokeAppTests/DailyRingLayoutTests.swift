@@ -383,6 +383,21 @@ final class DailyRingLayoutTests: XCTestCase {
         XCTAssertFalse(DailyRingLayout.isWithinRetention(date: date(2026, 9, 20), now: now, calendar: calendar), "未来の日は対象外")
     }
 
+    /// カレンダーの日付タップ・アーカイブ詳細画面の前日/翌日スワイプで共通に使う可否判定。
+    func testArchiveAvailabilityCoversRetentionAndSavedDaysButNeverTheFuture() {
+        let now = date(2026, 9, 19, 9, 0)
+        // 直近7日は、保存済みでなくても開ける（端末に履歴が残っていそうなので）。
+        XCTAssertTrue(DailyRingLayout.isArchiveAvailable(date: date(2026, 9, 13), hasSavedRecord: false, now: now, calendar: calendar))
+        // 7日より前でも、保存済みなら開ける。
+        XCTAssertTrue(DailyRingLayout.isArchiveAvailable(date: date(2026, 8, 1), hasSavedRecord: true, now: now, calendar: calendar))
+        // 7日より前で、保存もされていなければ開けない。
+        XCTAssertFalse(DailyRingLayout.isArchiveAvailable(date: date(2026, 8, 1), hasSavedRecord: false, now: now, calendar: calendar))
+        // 未来の日は、保存済みフラグが（誤って）trueでも開けない。
+        XCTAssertFalse(DailyRingLayout.isArchiveAvailable(date: date(2026, 9, 20), hasSavedRecord: true, now: now, calendar: calendar), "未来の日はスワイプでも進めない")
+        // 今日は常に開ける。
+        XCTAssertTrue(DailyRingLayout.isArchiveAvailable(date: date(2026, 9, 19), hasSavedRecord: false, now: now, calendar: calendar))
+    }
+
     // MARK: - 画像生成（クラッシュしないこと・大きさ）
 
     func testRendererProducesImageOfRequestedSize() {
