@@ -282,6 +282,8 @@ struct DailyRingPanel: View {
     @State private var diaryText = ""
     @State private var diaryEmoji: String?
     @State private var showEmojiPicker = false
+    /// テキスト欄にキーボードが出ているか。キーボードを閉じる手段（完了ボタン・他の場所をタップ）に使う。
+    @FocusState private var diaryFieldFocused: Bool
 
     var body: some View {
         ScrollView {
@@ -371,6 +373,11 @@ struct DailyRingPanel: View {
                     .padding(.horizontal, 16)
             }
             .padding(.vertical, 16)
+            // ひとこと日記のキーボードが出ている間、他の場所をタップしたら閉じる
+            // （ボタン・テキスト欄など、それ自身のタップに反応する部品が優先されるので、
+            // それ以外の余白をタップしたときだけ働く）。
+            .contentShape(Rectangle())
+            .onTapGesture { diaryFieldFocused = false }
         }
         .task(id: diaryDate) { await loadDiaryAndSuggestIfEmpty() }
         .sheet(isPresented: $showEmojiPicker) {
@@ -450,6 +457,17 @@ struct DailyRingPanel: View {
                 )
                 .lineLimit(1...3)
                 .textFieldStyle(.plain)
+                .focused($diaryFieldFocused)
+                .submitLabel(.done)
+                .onSubmit { diaryFieldFocused = false }
+                .toolbar {
+                    // キーボードの上に「完了」ボタンを出す。改行を許す複数行入力欄では
+                    // リターンキーが必ずしも閉じる操作にならないため、確実な手段として用意する。
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("完了") { diaryFieldFocused = false }
+                    }
+                }
 
                 Text("\(diaryText.count)/\(DiaryNote.maxTextLength)")
                     .font(.caption2)

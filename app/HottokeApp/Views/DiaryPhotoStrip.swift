@@ -11,7 +11,10 @@ struct DiaryPhotoStrip: View {
 
     @State private var items: [DiaryPhotoService.Item] = []
     @State private var thumbnails: [String: UIImage] = [:]
-    @State private var viewerItem: DiaryPhotoService.Item?
+    /// タップした写真。`showViewer`と分けて持つ（`.sheet(item:)`は環境によって開かないことがあるため、
+    /// `.fullScreenCover(isPresented:)`＋別途保持したこの値、という組み合わせのほうが確実に動く）。
+    @State private var selectedItem: DiaryPhotoService.Item?
+    @State private var showViewer = false
 
     var body: some View {
         Group {
@@ -19,11 +22,14 @@ struct DiaryPhotoStrip: View {
                 HStack(spacing: 8) {
                     ForEach(items) { item in
                         Button {
-                            viewerItem = item
+                            selectedItem = item
+                            showViewer = true
                         } label: {
                             thumbnailView(for: item)
                         }
                         .buttonStyle(.plain)
+                        // ラベルの見た目に関わらず、枠全体を確実にタップできるようにする。
+                        .contentShape(Rectangle())
                         .accessibilityLabel("この日撮った写真")
                     }
                     Spacer(minLength: 0)
@@ -31,8 +37,8 @@ struct DiaryPhotoStrip: View {
             }
         }
         .task(id: "\(enabled)-\(date)") { await load() }
-        .sheet(item: $viewerItem) { item in
-            DiaryPhotoViewerSheet(items: items, initialID: item.id)
+        .fullScreenCover(isPresented: $showViewer) {
+            DiaryPhotoViewerSheet(items: items, initialID: selectedItem?.id ?? items.first?.id ?? "")
         }
     }
 
