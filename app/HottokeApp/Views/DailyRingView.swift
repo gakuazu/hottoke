@@ -278,6 +278,11 @@ struct DailyRingPanel: View {
     @State private var saveErrorMessage: String?
     @State private var isSaving = false
 
+    // MARK: - ひとこと日記（docs/29-app1-diary-note-design.md）
+    @State private var diaryText = ""
+    @State private var diaryEmoji: String?
+    @State private var showEmojiPicker = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -289,6 +294,9 @@ struct DailyRingPanel: View {
                 ringArea
                     .aspectRatio(1, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
+                    .padding(.horizontal, 16)
+
+                diaryCard
                     .padding(.horizontal, 16)
 
                 statusLine
@@ -361,6 +369,91 @@ struct DailyRingPanel: View {
             }
             .padding(.vertical, 16)
         }
+        .task(id: diaryDate) { loadDiary() }
+        .sheet(isPresented: $showEmojiPicker) {
+            EmojiPickerSheet(selected: diaryEmoji) { picked in
+                diaryEmoji = picked
+                saveDiary()
+            }
+        }
+    }
+
+    // MARK: - ひとこと日記
+
+    /// この輪が表しているカレンダー上の日（今日タブなら今日、アーカイブならその日）。
+    private var diaryDate: Date {
+        Calendar.current.startOfDay(for: store.date ?? Date())
+    }
+
+    private func loadDiary() {
+        let note = DiaryNoteStore.shared.note(for: diaryDate)
+        diaryText = note?.text ?? ""
+        diaryEmoji = note?.emoji
+    }
+
+    private func saveDiary() {
+        DiaryNoteStore.shared.save(text: diaryText, emoji: diaryEmoji, for: diaryDate)
+    }
+
+    /// 「1日の輪」の絵のすぐ下、歩数の表示より上に置く、写真のキャプションのようなカード。
+    /// 今日タブ・アーカイブの日別詳細のどちらも、この`DailyRingPanel`を使っているので、
+    /// ここに1か所追加するだけで両方に反映される。
+    private var diaryCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if !store.isToday {
+                Text("この日の記録（あとから書ける・書き直せる）")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(alignment: .center, spacing: 12) {
+                Button {
+                    showEmojiPicker = true
+                } label: {
+                    Group {
+                        if let diaryEmoji {
+                            Text(diaryEmoji)
+                                .font(.system(size: 26))
+                        } else {
+                            Image(systemName: "face.smiling")
+                                .font(.system(size: 20))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Color.secondary.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(diaryEmoji == nil ? "絵文字を選ぶ" : "絵文字: \(diaryEmoji ?? "")")
+
+                TextField(
+                    "今日をひとことで（任意）",
+                    text: Binding(
+                        get: { diaryText },
+                        set: { newValue in
+                            diaryText = String(newValue.prefix(DiaryNote.maxTextLength))
+                            saveDiary()
+                        }
+                    ),
+                    axis: .vertical
+                )
+                .lineLimit(1...3)
+                .textFieldStyle(.plain)
+
+                Text("\(diaryText.count)/\(DiaryNote.maxTextLength)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.secondary.opacity(0.10))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .strokeBorder(store.isToday ? Color.clear : Color.accentColor.opacity(0.5), lineWidth: 1.5)
+        )
     }
 
     private var periodPicker: some View {

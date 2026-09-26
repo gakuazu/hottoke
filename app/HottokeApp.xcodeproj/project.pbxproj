@@ -53,6 +53,10 @@
 		DF5DB3B3DE8342F28EA2030C /* RingArtRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB2902AF1C74FC99618034F /* RingArtRenderer.swift */; };
 		CB5F1DD8ECA468EA8BDA02B1 /* ActivityDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */; };
 		77C1BB5B2D6A117218D96AB8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9E737C6EC4BCDAEB14BC50A3 /* Assets.xcassets */; };
+		9634CF6AD0FAA41F89E15387 /* DiaryNote.swift in Sources */ = {isa = PBXBuildFile; fileRef = 079FC66CBD963238ED2F7A04 /* DiaryNote.swift */; };
+		29B21896F713D6C8CC854342 /* DiaryNoteStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0215C07E236D176F80E9E47 /* DiaryNoteStore.swift */; };
+		ADD4A8222FB59CAC0D019FC2 /* EmojiPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56BA9839DC55FDBA3CA974B9 /* EmojiPickerSheet.swift */; };
+		8A06800F65610A38040BEF57 /* DiaryNoteStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B20C2EFC0BBA97E48BEDF3 /* DiaryNoteStoreTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -115,6 +119,10 @@
 		4AB2902AF1C74FC99618034F /* RingArtRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingArtRenderer.swift; sourceTree = "<group>"; };
 		5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityDataServiceTests.swift; sourceTree = "<group>"; };
 		9E737C6EC4BCDAEB14BC50A3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		079FC66CBD963238ED2F7A04 /* DiaryNote.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryNote.swift; sourceTree = "<group>"; };
+		A0215C07E236D176F80E9E47 /* DiaryNoteStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryNoteStore.swift; sourceTree = "<group>"; };
+		56BA9839DC55FDBA3CA974B9 /* EmojiPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPickerSheet.swift; sourceTree = "<group>"; };
+		E1B20C2EFC0BBA97E48BEDF3 /* DiaryNoteStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryNoteStoreTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -151,6 +159,7 @@
 				90AD8A2DAFB533C4C4C440EF /* RootTabView.swift */,
 				74CE520F1F8CDE85DCBC7898 /* SettingsView.swift */,
 				E3612CECAD3713242D5C513E /* TodayView.swift */,
+				56BA9839DC55FDBA3CA974B9 /* EmojiPickerSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -188,6 +197,7 @@
 				454E3E490F13B82A5BA26920 /* KaleidoscopeTimeline.swift */,
 				C44D56317BE946A98D1C24D2 /* PatternStyle.swift */,
 				75A9F5C9C868F92730497A1A /* TimeOfDay.swift */,
+				079FC66CBD963238ED2F7A04 /* DiaryNote.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -219,6 +229,7 @@
 				F1A5938A07E80761EBF73C65 /* MotionInputService.swift */,
 				588C2E0E9873223419F76C84 /* PhotoLibrarySaver.swift */,
 				146C08485138A55C08971E68 /* TodayPatternStore.swift */,
+				A0215C07E236D176F80E9E47 /* DiaryNoteStore.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -232,6 +243,7 @@
 				3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */,
 				2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */,
 				5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */,
+				E1B20C2EFC0BBA97E48BEDF3 /* DiaryNoteStoreTests.swift */,
 			);
 			path = HottokeAppTests;
 			sourceTree = "<group>";
@@ -337,6 +349,7 @@
 				A5CBE56FAA14403E9FA0D73C /* DailyRingLayoutTests.swift in Sources */,
 				8057CEED4BDEE521B444BA03 /* KaleidoscopeLogicTests.swift in Sources */,
 				CB5F1DD8ECA468EA8BDA02B1 /* ActivityDataServiceTests.swift in Sources */,
+				8A06800F65610A38040BEF57 /* DiaryNoteStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -383,6 +396,9 @@
 				721D7FFA202324B9B8375C0B /* TimeOfDay.swift in Sources */,
 				685338E60C8C99E257F76327 /* TodayPatternStore.swift in Sources */,
 				AA811FF3672F31DE9D3C867A /* TodayView.swift in Sources */,
+				9634CF6AD0FAA41F89E15387 /* DiaryNote.swift in Sources */,
+				29B21896F713D6C8CC854342 /* DiaryNoteStore.swift in Sources */,
+				ADD4A8222FB59CAC0D019FC2 /* EmojiPickerSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
