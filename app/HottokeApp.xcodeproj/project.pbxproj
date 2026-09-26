@@ -52,6 +52,7 @@
 		B7AB2CF948D742DFBBAD7F92 /* RingEpisode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26444AE8BE93444A9DAD27F1 /* RingEpisode.swift */; };
 		DF5DB3B3DE8342F28EA2030C /* RingArtRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB2902AF1C74FC99618034F /* RingArtRenderer.swift */; };
 		CB5F1DD8ECA468EA8BDA02B1 /* ActivityDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */; };
+		77C1BB5B2D6A117218D96AB8 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9E737C6EC4BCDAEB14BC50A3 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -113,6 +114,7 @@
 		26444AE8BE93444A9DAD27F1 /* RingEpisode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingEpisode.swift; sourceTree = "<group>"; };
 		4AB2902AF1C74FC99618034F /* RingArtRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingArtRenderer.swift; sourceTree = "<group>"; };
 		5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityDataServiceTests.swift; sourceTree = "<group>"; };
+		9E737C6EC4BCDAEB14BC50A3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -133,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				DCB3FDEDAA6B6156232BF1AB /* Info.plist */,
+				9E737C6EC4BCDAEB14BC50A3 /* Assets.xcassets */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -268,6 +271,7 @@
 			buildConfigurationList = D786044F1ECF26693E18479C /* Build configuration list for PBXNativeTarget "HottokeApp" */;
 			buildPhases = (
 				CF96844155FD8A857A23CFC1 /* Sources */,
+				2A0CB6D2DB025D739C00BBDC /* Resources */,
 			);
 			buildRules = (
 			);
@@ -310,6 +314,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2A0CB6D2DB025D739C00BBDC /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				77C1BB5B2D6A117218D96AB8 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		4761F18DAFFAC0CC6B1CAC8F /* Sources */ = {

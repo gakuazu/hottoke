@@ -833,3 +833,9 @@ GitHub Actionsのシミュレータ（デバッグビルド）での参考値: 1
 ## 2026-09-26 カレイド日記: アプリ名を「トキノワ」に変更
 
 オーナー承認（経緯は`docs/26-app1-naming-decision.md`参照）により、アプリの表示名を「カレイド日記」から「トキノワ」に変更した（`Info.plist`のCFBundleDisplayNameと`project.yml`）。内部の識別子（Bundle ID・PRODUCT_NAME・型名など）は変更していない。
+
+---
+
+## 2026-09-26 カレイド日記: アプリアイコンを新規設定（D: 満ちていく輪）
+
+オーナー承認の「D: 満ちていく輪」案（`docs/28-app1-icon-concepts.md`参照）の最終画像（`docs/assets/app-icon-1024.png`、1024×1024・アルファチャンネルなし）を、`Assets.xcassets/AppIcon.appiconset`として新規登録した。今のXcodeの「単一サイズ」方式（1024pxの画像1枚だけでOSが自動的に必要なサイズへ縮小する）に対応しており、ビルド設定の`ASSETCATALOG_COMPILER_APPICON_NAME`は元々`AppIcon`を指すよう設定済みだったため、アセットカタログ自体の追加とXcodeプロジェクトへの登録（Resourcesビルドフェーズ）だけで反映される。
