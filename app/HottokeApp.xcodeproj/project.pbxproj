@@ -64,6 +64,7 @@
 		587E3CE1A42074543A00F04A /* DiaryPhotoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 461ABF9D5FEB90812A47970C /* DiaryPhotoService.swift */; };
 		F22116F492081AB9B939517D /* DiaryPhotoStrip.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8809A28480A03C58F385D92 /* DiaryPhotoStrip.swift */; };
 		5103F3D63E9A75ECBE3F17E7 /* LocationDiaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 744E428AB79EADAAD0ED4D5F /* LocationDiaryTests.swift */; };
+		87E328F3F7203B937890483F /* DiaryPhotoServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8293CA407F7B7E70359FBB0 /* DiaryPhotoServiceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -137,6 +138,7 @@
 		461ABF9D5FEB90812A47970C /* DiaryPhotoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryPhotoService.swift; sourceTree = "<group>"; };
 		C8809A28480A03C58F385D92 /* DiaryPhotoStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryPhotoStrip.swift; sourceTree = "<group>"; };
 		744E428AB79EADAAD0ED4D5F /* LocationDiaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationDiaryTests.swift; sourceTree = "<group>"; };
+		A8293CA407F7B7E70359FBB0 /* DiaryPhotoServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiaryPhotoServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -265,6 +267,7 @@
 				5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */,
 				E1B20C2EFC0BBA97E48BEDF3 /* DiaryNoteStoreTests.swift */,
 				744E428AB79EADAAD0ED4D5F /* LocationDiaryTests.swift */,
+				A8293CA407F7B7E70359FBB0 /* DiaryPhotoServiceTests.swift */,
 			);
 			path = HottokeAppTests;
 			sourceTree = "<group>";
@@ -372,6 +375,7 @@
 				CB5F1DD8ECA468EA8BDA02B1 /* ActivityDataServiceTests.swift in Sources */,
 				8A06800F65610A38040BEF57 /* DiaryNoteStoreTests.swift in Sources */,
 				5103F3D63E9A75ECBE3F17E7 /* LocationDiaryTests.swift in Sources */,
+				87E328F3F7203B937890483F /* DiaryPhotoServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

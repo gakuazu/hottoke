@@ -13,10 +13,47 @@ enum DiaryPhotoService {
         static func == (lhs: Item, rhs: Item) -> Bool { lhs.id == rhs.id }
     }
 
+    /// 現在の読み取り権限の状態。
+    static func authorizationStatus() -> PHAuthorizationStatus {
+        PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    }
+
     /// 読み取り権限がすでにあるか（`.limited`＝一部の写真のみ許可、も利用可能として扱う）。
     static func isAuthorized() -> Bool {
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        let status = authorizationStatus()
         return status == .authorized || status == .limited
+    }
+
+    /// `DiaryPhotoStrip`が画面に何を出すかの状態（権限の状態・その日の写真の有無から決まる、
+    /// Photosフレームワークの実際のデータを使わない純粋な判定）。
+    /// オーナー実機フィードバック対応: 以前は権限待ち・拒否・0枚のいずれも「エリアを完全に隠す」
+    /// 扱いだったため、状態が画面から分からなくなっていた。この関数で状態を明確に分ける。
+    enum AccessPresentation: Equatable {
+        /// 許可済みで、その日の写真がある（サムネイルを並べる）。
+        case thumbnails
+        /// 許可済みだが、その日の写真が0枚。
+        case noPhotosThisDay
+        /// まだ許可を聞いていない（その場でもう一度ダイアログを出す導線を出せる）。
+        case needsPermission
+        /// 明確に拒否されている（設定アプリへ誘導する）。
+        case denied
+        /// 制限されている（スクリーンタイム等。設定アプリでは変更できないことが多い）。
+        case restricted
+    }
+
+    static func presentation(for status: PHAuthorizationStatus, hasPhotosThisDay: Bool) -> AccessPresentation {
+        switch status {
+        case .authorized, .limited:
+            return hasPhotosThisDay ? .thumbnails : .noPhotosThisDay
+        case .denied:
+            return .denied
+        case .restricted:
+            return .restricted
+        case .notDetermined:
+            return .needsPermission
+        @unknown default:
+            return .needsPermission
+        }
     }
 
     /// 必要なら許可ダイアログを出す。すでに拒否済みなら、ダイアログは出さずfalseを返す
