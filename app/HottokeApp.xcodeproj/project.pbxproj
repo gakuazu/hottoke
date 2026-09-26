@@ -51,6 +51,7 @@
 		1AE3E41B57E74DCBBAC9CD1F /* RingArtStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90860A2AED334A0CBA88A3F5 /* RingArtStyle.swift */; };
 		B7AB2CF948D742DFBBAD7F92 /* RingEpisode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26444AE8BE93444A9DAD27F1 /* RingEpisode.swift */; };
 		DF5DB3B3DE8342F28EA2030C /* RingArtRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AB2902AF1C74FC99618034F /* RingArtRenderer.swift */; };
+		CB5F1DD8ECA468EA8BDA02B1 /* ActivityDataServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -111,6 +112,7 @@
 		90860A2AED334A0CBA88A3F5 /* RingArtStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingArtStyle.swift; sourceTree = "<group>"; };
 		26444AE8BE93444A9DAD27F1 /* RingEpisode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingEpisode.swift; sourceTree = "<group>"; };
 		4AB2902AF1C74FC99618034F /* RingArtRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RingArtRenderer.swift; sourceTree = "<group>"; };
+		5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityDataServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -226,6 +228,7 @@
 				18BAF00AAECE4DDB9B2AEB22 /* SleepEstimatorTests.swift */,
 				3EC0B3A2464A43FA8CF75F7E /* DailyRingLayoutTests.swift */,
 				2AA99EE3DA73FAA7D360B3D5 /* KaleidoscopeLogicTests.swift */,
+				5E2FA2F60F515D20A7A6145D /* ActivityDataServiceTests.swift */,
 			);
 			path = HottokeAppTests;
 			sourceTree = "<group>";
@@ -318,6 +321,7 @@
 				7B8C8D855AD34E52A530C70E /* SleepEstimatorTests.swift in Sources */,
 				A5CBE56FAA14403E9FA0D73C /* DailyRingLayoutTests.swift in Sources */,
 				8057CEED4BDEE521B444BA03 /* KaleidoscopeLogicTests.swift in Sources */,
+				CB5F1DD8ECA468EA8BDA02B1 /* ActivityDataServiceTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
