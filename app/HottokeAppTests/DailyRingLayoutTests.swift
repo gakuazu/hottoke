@@ -398,6 +398,54 @@ final class DailyRingLayoutTests: XCTestCase {
         XCTAssertTrue(DailyRingLayout.isArchiveAvailable(date: date(2026, 9, 19), hasSavedRecord: false, now: now, calendar: calendar))
     }
 
+    // MARK: - アーカイブ詳細画面の横スワイプ（ページ配列は追加のみ・削除や並び替えをしない）
+
+    /// 実機で「スワイプ後、半分ずつ2日の絵が混ざる」不具合が起きたため、ページ配列は
+    /// 常に「追加だけ」で、既存の要素を削除・並び替えしないことをテストで固定する。
+    func testExtendedPageDatesOnlyAddsNeverRemovesOrReorders() {
+        let d = { (day: Int) in self.date(2026, 9, day) }
+        let alwaysNavigable: (Date) -> Bool = { _ in true }
+
+        // 1件だけの配列から始めると、両側に1件ずつ足りるだけ増える。
+        let fromSingle = ArchiveDayDetailView.extendedPageDates([d(15)], around: d(15), calendar: calendar, isNavigable: alwaysNavigable)
+        XCTAssertEqual(fromSingle, [d(14), d(15), d(16)])
+
+        // 先頭にいるときは前に1件だけ増える。末尾（15日）はそのまま。
+        let extendedFront = ArchiveDayDetailView.extendedPageDates([d(14), d(15), d(16)], around: d(14), calendar: calendar, isNavigable: alwaysNavigable)
+        XCTAssertEqual(extendedFront, [d(13), d(14), d(15), d(16)], "既存の要素はそのまま残り、前に1件だけ足される")
+
+        // 末尾にいるときは後ろに1件だけ増える。
+        let extendedBack = ArchiveDayDetailView.extendedPageDates([d(14), d(15), d(16)], around: d(16), calendar: calendar, isNavigable: alwaysNavigable)
+        XCTAssertEqual(extendedBack, [d(14), d(15), d(16), d(17)])
+
+        // 真ん中（端ではない）にいるときは、何も追加しない（既存のまま）。
+        let unchanged = ArchiveDayDetailView.extendedPageDates([d(14), d(15), d(16)], around: d(15), calendar: calendar, isNavigable: alwaysNavigable)
+        XCTAssertEqual(unchanged, [d(14), d(15), d(16)])
+
+        // すでに隣が配列にあるなら、重複して追加しない。
+        let noDuplicate = ArchiveDayDetailView.extendedPageDates([d(14), d(15)], around: d(14), calendar: calendar, isNavigable: alwaysNavigable)
+        XCTAssertEqual(noDuplicate, [d(13), d(14), d(15)])
+        XCTAssertEqual(
+            ArchiveDayDetailView.extendedPageDates(noDuplicate, around: d(14), calendar: calendar, isNavigable: alwaysNavigable),
+            noDuplicate,
+            "同じ隣をもう一度追加しようとしても増えない"
+        )
+
+        // 移動できない側（isNavigableがfalse）には追加しない。
+        let neverNavigable: (Date) -> Bool = { _ in false }
+        XCTAssertEqual(
+            ArchiveDayDetailView.extendedPageDates([d(15)], around: d(15), calendar: calendar, isNavigable: neverNavigable),
+            [d(15)],
+            "境界（例: 今日や、これ以上遡れない日）では増えない"
+        )
+
+        // 配列に含まれない日を指定した場合は、何もしない（元の配列のまま）。
+        XCTAssertEqual(
+            ArchiveDayDetailView.extendedPageDates([d(14), d(15)], around: d(20), calendar: calendar, isNavigable: alwaysNavigable),
+            [d(14), d(15)]
+        )
+    }
+
     // MARK: - 画像生成（クラッシュしないこと・大きさ）
 
     func testRendererProducesImageOfRequestedSize() {

@@ -84,8 +84,21 @@ final class DailyHistoryTests: XCTestCase {
         XCTAssertEqual(store.record(forKey: "2026-09-18"), good)
     }
 
+    /// テスト用に、初期状態から独立したUserDefaultsを作る（`.standard`を使うとテスト間で汚染しうるため）。
+    private func freshDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "hottoke-test-history-\(UUID().uuidString)")!
+    }
+
+    /// 睡眠推定バグ修正ぶんの一度きりの取り直しは、すでに済んでいるものとしたUserDefaults。
+    private func resyncAlreadyDoneDefaults() -> UserDefaults {
+        let defaults = freshDefaults()
+        defaults.set(DailyHistoryStore.resyncVersion, forKey: DailyHistoryStore.resyncVersionDefaultsKey)
+        return defaults
+    }
+
     func testRecentRecordsAndRefreshRules() {
-        let store = DailyHistoryStore(directory: tempDirectory())
+        // 睡眠推定バグ修正の取り直しはすでに済んでいるものとして、通常運用時のルールだけを見る。
+        let store = DailyHistoryStore(directory: tempDirectory(), defaults: resyncAlreadyDoneDefaults())
         for d in 10...19 { store.save(slices(day: d, now: d == 19 ? date(19, 12) : date(d + 1, 9))) }
         let now = date(19, 12)
         let week = store.recentRecords(days: 7, endingAt: now, calendar: calendar)
@@ -98,6 +111,24 @@ final class DailyHistoryTests: XCTestCase {
         XCTAssertTrue(store.needsRefresh(offset: 1, day: date(18), calendar: calendar))
         XCTAssertFalse(store.needsRefresh(offset: 3, day: date(16), calendar: calendar))
         XCTAssertTrue(store.needsRefresh(offset: 5, day: date(1), calendar: calendar), "保存がない日は取得する")
+    }
+
+    /// 睡眠推定バグ修正（日境界の食い違い）を、すでに保存済みの直近の日にも反映するための一度きりの再同期。
+    func testOneTimeResyncForcesRefreshOfAlreadySavedRecentDaysThenStopsForcing() {
+        let defaults = freshDefaults()
+        let store = DailyHistoryStore(directory: tempDirectory(), defaults: defaults)
+        for d in 10...19 { store.save(slices(day: d, now: d == 19 ? date(19, 12) : date(d + 1, 9))) }
+        let now = date(19, 12)
+
+        // インストール直後・まだ取り直していない状態では、直近7日は保存済み・完了扱いでも取り直しが必要。
+        XCTAssertTrue(store.needsOneTimeResync)
+        XCTAssertTrue(store.needsRefresh(offset: 3, day: date(16), calendar: calendar), "修正の取り直し前は、保存済み・完了扱いでも取り直す")
+        XCTAssertTrue(store.needsRefresh(offset: 6, day: date(13), calendar: calendar))
+
+        // 一度「取り直し済み」を記録すると、以降は通常運用時のルールに戻る。
+        defaults.set(DailyHistoryStore.resyncVersion, forKey: DailyHistoryStore.resyncVersionDefaultsKey)
+        XCTAssertFalse(store.needsOneTimeResync)
+        XCTAssertFalse(store.needsRefresh(offset: 3, day: date(16), calendar: calendar), "取り直し済みになったら、以前と同じく完全な保存は取り直さない")
     }
 
     func testThumbnailIsCachedAndRebuiltWhenContentChanges() throws {

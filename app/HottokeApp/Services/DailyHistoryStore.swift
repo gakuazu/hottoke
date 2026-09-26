@@ -11,19 +11,41 @@ final class DailyHistoryStore: ObservableObject {
     /// アプリを開くたびに取り直す日数（今日を含む）。
     static let syncDays = 7
 
+    /// 睡眠推定の日境界バグ修正（2026-09-26、`ActivityDataService`が対象日の前後の実際の歩数を
+    /// 使うようにした変更）を、すでに保存済みの直近の日にも反映するための版数。この値を上げると、
+    /// 次に同期したときだけ、直近`syncDays`日ぶんを「保存済み・完了扱い」でも関係なく
+    /// もう一度取り直す（＝古い誤った判定のまま端末に残ってしまうのを防ぐ）。
+    /// 対象は端末にCoreMotionの生データがまだ残っていそうな直近の日に限られる
+    /// （それより古い日は生データ自体が失われている可能性が高く、直しようがない）。
+    static let resyncVersion = 1
+    /// 上記の版数をどこまで適用したかを覚えておくUserDefaultsのキー。
+    static let resyncVersionDefaultsKey = "dailyHistoryResyncVersion"
+
     @Published private(set) var records: [String: DailyRingSlices]
     /// 保存のたびに増える番号（画面の再読み込みのきっかけに使う）。
     @Published private(set) var revision = 0
 
     private let fileURL: URL
+    private let defaults: UserDefaults
     private var isSyncing = false
 
     /// `directory`を渡すとそこに保存する（テスト用）。省略時はApplication Support。
-    init(directory: URL? = nil) {
+    /// `defaults`も同様にテスト用（省略時は`UserDefaults.standard`）。
+    init(directory: URL? = nil, defaults: UserDefaults = .standard) {
         let dir = directory ?? Self.defaultDirectory()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         fileURL = dir.appendingPathComponent("daily-history.json")
         records = Self.load(from: fileURL)
+        self.defaults = defaults
+    }
+
+    /// まだ今回の睡眠推定バグ修正ぶんの取り直しをしていないか（一度きりの再同期が必要か）。
+    var needsOneTimeResync: Bool {
+        defaults.integer(forKey: Self.resyncVersionDefaultsKey) < Self.resyncVersion
+    }
+
+    private func markOneTimeResyncDone() {
+        defaults.set(Self.resyncVersion, forKey: Self.resyncVersionDefaultsKey)
     }
 
     static func defaultDirectory() -> URL {
@@ -79,14 +101,18 @@ final class DailyHistoryStore: ObservableObject {
     // MARK: - 直近の日を取り直して保存
 
     /// 取り直す必要がある日か。今日と昨日は毎回（昨日は、今朝の睡眠が増えると夜の分の推定が変わるため）。
+    /// まだ`resyncVersion`ぶんの取り直しが済んでいなければ、直近`syncDays`日ぶんはすべて対象。
     /// それ以外は、まだ保存がない日、または途中の状態で保存した日だけ。
     func needsRefresh(offset: Int, day: Date, calendar: Calendar = .current) -> Bool {
         if offset <= 1 { return true }
+        if needsOneTimeResync { return true }
         guard let record = record(for: day, calendar: calendar) else { return true }
         return !record.isComplete
     }
 
     /// 直近7日ぶんを端末の履歴から取り直して保存する。今日は呼び出し側が保存する場合は`includeToday`をfalseに。
+    /// まだ睡眠推定バグ修正の取り直しが済んでいなければ、直近7日ぶんをこの1回でまとめて取り直し、
+    /// 最後まで実行できたら「済み」の印を付ける（次回以降はいつもどおり必要な日だけ取り直す）。
     @MainActor
     func syncRecentDays(service: ActivityDataService, now: Date = Date(), includeToday: Bool = true) async {
         guard !isSyncing else { return }
@@ -94,12 +120,20 @@ final class DailyHistoryStore: ObservableObject {
         defer { isSyncing = false }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: now)
+        let wasResyncNeeded = needsOneTimeResync
+        var reachedTheEnd = true
         for offset in 0..<Self.syncDays {
             if offset == 0 && !includeToday { continue }
-            guard let day = calendar.date(byAdding: .day, value: -offset, to: today),
-                  needsRefresh(offset: offset, day: day, calendar: calendar) else { continue }
+            guard let day = calendar.date(byAdding: .day, value: -offset, to: today) else {
+                reachedTheEnd = false
+                continue
+            }
+            guard needsRefresh(offset: offset, day: day, calendar: calendar) else { continue }
             let data = await service.fetch(for: day, includeHourlySteps: true)
             save(DailyRingLayout.makeSlices(data: data, now: now, calendar: calendar))
+        }
+        if wasResyncNeeded && reachedTheEnd {
+            markOneTimeResyncDone()
         }
     }
 }
