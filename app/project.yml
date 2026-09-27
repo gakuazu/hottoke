@@ -36,7 +36,10 @@ targets:
         UIRequiresFullScreen: true
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.gakuazu.hottoke.app
+        # 【一時的な診断用】Sideloadlyの「Guru Meditation ... Invalid file」インストール失敗の
+        # 切り分けのため、正規のcom.gakuazu.hottoke.appから一時的にこの値に変更している。
+        # 診断が終わったらcom.gakuazu.hottoke.appに戻すこと（docs/04-build-log.mdへの追記はまだしない）。
+        PRODUCT_BUNDLE_IDENTIFIER: com.gakuazu.hottoke.diag
         PRODUCT_NAME: HottokeApp
   HottokeAppTests:
     type: bundle.unit-test

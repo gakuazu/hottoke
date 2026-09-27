@@ -456,7 +456,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.diag;
 				PRODUCT_NAME = HottokeApp;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -492,7 +492,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.app;
+				PRODUCT_BUNDLE_IDENTIFIER = com.gakuazu.hottoke.diag;
 				PRODUCT_NAME = HottokeApp;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
