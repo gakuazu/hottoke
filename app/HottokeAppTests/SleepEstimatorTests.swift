@@ -63,20 +63,58 @@ final class SleepEstimatorTests: XCTestCase {
         XCTAssertEqual(result.filter { $0.kind == .walking }.reduce(0) { $0 + $1.duration }, 600, accuracy: 1)
     }
 
-    func testLongInterruptionSplitsTheSleep() {
-        // 23:00〜1:00 静止、1:00〜2:00 歩行、2:00〜6:00 静止 → 前半2時間は短すぎて対象外、後半4時間のみ睡眠
+    func testHourLongInterruptionNoLongerSplitsTheSleep() {
+        // 23:00〜1:00 静止、1:00〜2:00 歩行(60分＝許容の範囲内)、2:00〜6:00 静止
+        // → 中断(1時間)を除いた前後2時間+4時間がひと続きの睡眠とみなされる。中断そのものは歩行のまま残る。
+        // 【2026-09-27】以前は中断の許容が15分までで、この60分の中断で前半2時間・後半4時間に分断され、
+        // 前半(2時間)は3時間未満のため睡眠と判定されなかった（実機の不具合の原因の1つ）。
         let segments = [seg(t(18, 23), t(19, 1), .stationary), seg(t(19, 1), t(19, 2), .walking), seg(t(19, 2), t(19, 6), .stationary)]
         let result = run(segments, from: t(18, 22), to: t(19, 7))
-        XCTAssertEqual(sleepingSeconds(result), 4 * 3600, accuracy: 1)
+        XCTAssertEqual(sleepingSeconds(result), 6 * 3600, accuracy: 1)
+        XCTAssertEqual(result.filter { $0.kind == .walking }.reduce(0) { $0 + $1.duration }, 3600, accuracy: 1, "中断そのものは歩行のまま残る")
+    }
+
+    func testInterruptionLongerThanToleranceStillSplitsTheSleep() {
+        // 23:00〜1:00 静止(2時間)、1:00〜2:30 歩行(90分＝許容の60分を超える)、2:30〜7:00 静止(4時間30分)
+        // → 前半2時間は短すぎて対象外。中断が許容を超えるのでひと続きにはならず、後半4時間30分だけ睡眠。
+        let segments = [seg(t(18, 23), t(19, 1), .stationary), seg(t(19, 1), t(19, 2, 30), .walking), seg(t(19, 2, 30), t(19, 7), .stationary)]
+        let result = run(segments, from: t(18, 22), to: t(19, 8))
+        XCTAssertEqual(sleepingSeconds(result), 4.5 * 3600, accuracy: 1)
+    }
+
+    /// 実機で報告された不具合「23時就寝・7時起床なのに0時以降が睡眠にならない」の再現。
+    /// CoreMotionが夜中に何度か数十分だけ誤って別の種類に分類しても、それぞれが60分以内の
+    /// 中断であれば、一晩通してひと続きの睡眠として認識できることを確認する。
+    func testMultipleModerateInterruptionsNoLongerPreventSleepDetection() {
+        // 23:00〜1:20(2h20m)静止、20分の中断(乗り物＝誤検知の想定)、1:40〜4:00(2h20m)静止、
+        // 20分の中断(歩行)、4:20〜7:00(2h40m)静止。どの断片も単独では3時間未満だが、
+        // 中断を除いた合計(7時間20分)は3時間を大きく超えており、開始23:00・終了7:00も
+        // 条件を満たすので、ひと続きの睡眠になるべき（以前はどの断片も3時間未満のため
+        // 睡眠なし判定になっていた＝実機の不具合そのもの）。
+        let segments = [
+            seg(t(18, 23), t(19, 1, 20), .stationary),
+            seg(t(19, 1, 20), t(19, 1, 40), .automotive),
+            seg(t(19, 1, 40), t(19, 4), .stationary),
+            seg(t(19, 4), t(19, 4, 20), .walking),
+            seg(t(19, 4, 20), t(19, 7), .stationary),
+        ]
+        let result = run(segments, from: t(18, 22), to: t(19, 8))
+        // 2回の中断(合計40分)を除いた7時間20分が睡眠になる。中断そのものは元の種類のまま残る。
+        XCTAssertEqual(sleepingSeconds(result), 8 * 3600 - 40 * 60, accuracy: 1)
+        XCTAssertEqual(result.filter { $0.kind == .automotive }.reduce(0) { $0 + $1.duration }, 20 * 60, accuracy: 1)
+        XCTAssertEqual(result.filter { $0.kind == .walking }.reduce(0) { $0 + $1.duration }, 20 * 60, accuracy: 1)
     }
 
     func testHoursWithManyStepsAreExcluded() {
-        // 23:00〜7:00 静止だが、2時台に600歩（動いていた）→ その1時間は対象外になり、前後に分割される
+        // 23:00〜7:00 静止だが、2時台に600歩（動いていた）→ その1時間だけ睡眠から除かれる。
+        // 【2026-09-27】中断の許容が60分に広がったので、この1時間の中断もひと続きとして
+        // 橋渡しされるが、実際に静かでなかった2時台の1時間そのものは、以前と同じく睡眠にはしない
+        // （橋渡し＝一晩の睡眠として認識するかどうかの判定と、実際に何を睡眠色にするかは別に扱う）。
         let segments = [seg(t(18, 23), t(19, 7), .stationary)]
         let result = run(segments, from: t(18, 22), to: t(19, 8), steps: { hour in
             hour == self.t(19, 2) ? 600 : 0
         })
-        // 23:00〜2:00（3時間）と 3:00〜7:00（4時間）が睡眠（2時台は対象外）。中断が1時間あるので、ひと続きにはならない。
+        // 23:00〜2:00（3時間）と 3:00〜7:00（4時間）が睡眠（2時台は対象外）。
         XCTAssertEqual(sleepingSeconds(result), 7 * 3600, accuracy: 1)
         XCTAssertTrue(result.contains { $0.kind == .stationary && $0.start == self.t(19, 2) })
     }
