@@ -451,8 +451,8 @@ final class DailyRingLayoutTests: XCTestCase {
     func testTodayTabInitialPagesIncludeYesterdayOnlyWhenNavigable() {
         let today = date(2026, 9, 19)
         let yesterday = date(2026, 9, 18)
-        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar) { _ in true }, [yesterday, today], "末尾が今日")
-        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar) { $0 <= today && $0 >= today }, [today], "遡れないなら今日だけ")
+        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar) { $0 <= today }, [yesterday, today], "末尾が今日")
+        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar) { $0 == today }, [today], "遡れないなら今日だけ")
         // 実際の判定（isArchiveAvailable）を、固定した「今」で使う。明日は不可、保持期間内の前日は可。
         let now = date(2026, 9, 19)
         let navigable: (Date) -> Bool = { DailyRingLayout.isArchiveAvailable(date: $0, hasSavedRecord: false, now: now, calendar: self.calendar) }
@@ -474,8 +474,8 @@ final class DailyRingLayoutTests: XCTestCase {
 
     func testTodayTabTitle() {
         let today = date(2026, 9, 19)
-        XCTAssertEqual(DailyRingView.pageTitle(for: today, today: today), "今日")
-        XCTAssertEqual(DailyRingView.pageTitle(for: date(2026, 9, 18), today: today), "9月18日(金)")
+        XCTAssertEqual(DailyRingView.pageTitle(for: today, today: today, calendar: calendar), "今日")
+        XCTAssertEqual(DailyRingView.pageTitle(for: date(2026, 9, 18), today: today, calendar: calendar), "9月18日(金)")
     }
 
     // MARK: - 画像生成（クラッシュしないこと・大きさ）

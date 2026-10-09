@@ -674,7 +674,7 @@ struct DailyRingView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
             }
-            .navigationTitle(Self.pageTitle(for: currentDate, today: todayDate))
+            .navigationTitle(Self.pageTitle(for: currentDate, today: todayDate, calendar: calendar))
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
@@ -774,11 +774,12 @@ struct DailyRingView: View {
     }
 
     /// ナビゲーションタイトル。今日は「今日」、過去日は「M月d日(E)」。
-    static func pageTitle(for date: Date, today: Date) -> String {
+    static func pageTitle(for date: Date, today: Date, calendar: Calendar = .current) -> String {
         if date == today { return "今日" }
         let formatter = DateFormatter()
         formatter.dateFormat = "M月d日(E)"
         formatter.locale = Locale(identifier: "ja_JP")
+        formatter.timeZone = calendar.timeZone
         return formatter.string(from: date)
     }
 
