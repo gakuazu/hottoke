@@ -30,7 +30,7 @@ struct CalendarArchiveView: View {
                         weekdayHeader
                         calendarGrid
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 8)
                     legend
                         .padding(.horizontal, 16)
                     historyNote
@@ -95,7 +95,7 @@ struct CalendarArchiveView: View {
     }
 
     private var calendarGrid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 8) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 8) {
             ForEach(Array(monthDays.enumerated()), id: \.offset) { _, date in
                 dayCell(date: date)
             }
@@ -166,7 +166,7 @@ struct CalendarArchiveView: View {
         }
     }
 
-    /// カレンダーの丸の直径。7列がiPhone SE（幅375pt）でも収まる大きさ（1列あたり約48pt）にしている。
+    /// カレンダーの丸の直径。幅375ptの端末では、左右の余白8pt・列間隔4ptで1列あたり約48ptになり、46ptの丸でも隣と約2pt空く。
     private static let circleSize: CGFloat = 46
 
     /// 表示中の月の、保存済みの記録。

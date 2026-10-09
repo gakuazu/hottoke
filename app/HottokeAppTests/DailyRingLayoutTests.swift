@@ -472,6 +472,25 @@ final class DailyRingLayoutTests: XCTestCase {
         XCTAssertEqual(DailyRingView.pageDatesAfterDayChange([d(18), d(19)], newToday: d(18), calendar: calendar), [d(18), d(19)])
     }
 
+    func testApplyDayChangeMovesTodayOnlyWhenViewingToday() {
+        let d = { (day: Int) in self.date(2026, 9, day) }
+        // 今日を見ていた: 新しい今日へ移り、配列は末尾に追加されるだけ。
+        let a = DailyRingView.applyDayChange(pageDates: [d(18), d(19)], todayDate: d(19), currentDate: d(19), newToday: d(20), calendar: calendar)
+        XCTAssertEqual(a.pageDates, [d(18), d(19), d(20)])
+        XCTAssertEqual(a.todayDate, d(20))
+        XCTAssertEqual(a.currentDate, d(20))
+        // 過去日を見ていた: 表示は動かさない。
+        let b = DailyRingView.applyDayChange(pageDates: [d(18), d(19)], todayDate: d(19), currentDate: d(18), newToday: d(20), calendar: calendar)
+        XCTAssertEqual(b.pageDates, [d(18), d(19), d(20)])
+        XCTAssertEqual(b.currentDate, d(18))
+        XCTAssertEqual(b.todayDate, d(20))
+        // 日付が変わっていない（同じ日・古い日付）: 何も変わらない。
+        let c = DailyRingView.applyDayChange(pageDates: [d(18), d(19)], todayDate: d(19), currentDate: d(19), newToday: d(19), calendar: calendar)
+        XCTAssertEqual(c.pageDates, [d(18), d(19)])
+        XCTAssertEqual(c.todayDate, d(19))
+        XCTAssertEqual(c.currentDate, d(19))
+    }
+
     func testTodayTabTitle() {
         let today = date(2026, 9, 19)
         XCTAssertEqual(DailyRingView.pageTitle(for: today, today: today, calendar: calendar), "今日")

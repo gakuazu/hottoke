@@ -274,6 +274,9 @@ final class DailyRingStore: ObservableObject {
 struct DailyRingPanel: View {
     @ObservedObject var store: DailyRingStore
     let proEnabled: Bool
+    /// 今日ページが表している日。nilなら`store.date`（過去日）を使う。今日ページでは、前面のまま0時を
+    /// 越えても日記の保存先が勝手に新しい日へ変わらないよう、ページ作成時の日付で固定して渡す。
+    var fixedDay: Date?
     @State private var showSavedBanner = false
     @State private var saveErrorMessage: String?
     @State private var isSaving = false
@@ -392,7 +395,7 @@ struct DailyRingPanel: View {
 
     /// この輪が表しているカレンダー上の日（今日タブなら今日、アーカイブならその日）。
     private var diaryDate: Date {
-        Calendar.current.startOfDay(for: store.date ?? Date())
+        Calendar.current.startOfDay(for: fixedDay ?? store.date ?? Date())
     }
 
     /// 保存済みの記録を読み込み、まだ何も書いていなければ「GPS自動日記」のデフォルトの
@@ -655,27 +658,34 @@ struct DailyRingView: View {
         })
     }
 
+    /// スワイプで行ってよい日か。未来（今日より後）は、0時直後で通知が届く前でも不可。
+    private func isNavigable(_ date: Date) -> Bool {
+        date <= todayDate && ArchiveDayDetailView.isDateNavigable(date, calendar: calendar)
+    }
+
     private var isViewingToday: Bool { currentDate == todayDate }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 4) {
-                // 表示の有無でレイアウトが動くとスワイプ中に乱れるので、場所は常に確保して透明度だけ変える。
-                Text("← スワイプで前日へ")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                    .opacity(pageDates.count > 1 && isViewingToday && !swipeHintSeen ? 1 : 0)
-                TabView(selection: $currentDate) {
-                    ForEach(pageDates, id: \.self) { day in
-                        page(for: day)
-                            .tag(day)
-                    }
+            TabView(selection: $currentDate) {
+                ForEach(pageDates, id: \.self) { day in
+                    page(for: day)
+                        .tag(day)
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            // ヒントは絵の上に重ねるだけで、場所は取らない（出し入れでレイアウトが動かない）。
+            .overlay(alignment: .top) {
+                if pageDates.count > 1 && isViewingToday && !swipeHintSeen {
+                    Text("← スワイプで前日へ")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                        .allowsHitTesting(false)
+                }
             }
             .navigationTitle(Self.pageTitle(for: currentDate, today: todayDate, calendar: calendar))
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItemGroup(placement: .navigationBarTrailing) {
                     if isViewingToday {
@@ -696,7 +706,7 @@ struct DailyRingView: View {
                         }
                         .disabled(store.isLoading)
                     } else {
-                        styleMenu
+                        // 過去日ではスタイルメニューを出さない（ロック案内が画面外の今日ページに出る取り違えを防ぐ）。
                         Button("今日に戻る") { currentDate = todayDate }
                     }
                 }
@@ -712,16 +722,21 @@ struct DailyRingView: View {
                 handleDayChangeIfNeeded()
                 Task { await store.refresh() }
             }
+            // 前面のまま0時を越えたときも、前面復帰時と同じ処理をする。
+            .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+                handleDayChangeIfNeeded()
+                Task { await store.refresh() }
+            }
             // ページめくりが確定したあとだけ、足りない隣を1枚追加する。
             .onChange(of: currentDate) { _, newValue in
                 if newValue != todayDate { swipeHintSeen = true }
                 pageDates = ArchiveDayDetailView.extendedPageDates(pageDates, around: newValue, calendar: calendar) {
-                    ArchiveDayDetailView.isDateNavigable($0, calendar: calendar)
+                    isNavigable($0)
                 }
             }
             .onChange(of: history.revision) { _, _ in
                 pageDates = ArchiveDayDetailView.extendedPageDates(pageDates, around: currentDate, calendar: calendar) {
-                    ArchiveDayDetailView.isDateNavigable($0, calendar: calendar)
+                    isNavigable($0)
                 }
             }
             .sheet(isPresented: $showReport) {
@@ -733,7 +748,7 @@ struct DailyRingView: View {
     @ViewBuilder
     private func page(for day: Date) -> some View {
         if day == todayDate {
-            DailyRingPanel(store: store, proEnabled: proEnabled)
+            DailyRingPanel(store: store, proEnabled: proEnabled, fixedDay: todayDate)
         } else {
             ArchiveDayPage(date: day, proEnabled: proEnabled, styleRaw: styleRaw)
         }
@@ -743,11 +758,11 @@ struct DailyRingView: View {
     /// 前面に戻った瞬間（スワイプ中ではない）だけで呼ぶ。今日のページを見ていたなら、新しい今日へ移す。
     private func handleDayChangeIfNeeded() {
         let newToday = calendar.startOfDay(for: Date())
-        guard newToday != todayDate else { return }
-        let wasViewingToday = isViewingToday
-        pageDates = Self.pageDatesAfterDayChange(pageDates, newToday: newToday, calendar: calendar)
-        todayDate = newToday
-        if wasViewingToday { currentDate = newToday }
+        let result = Self.applyDayChange(pageDates: pageDates, todayDate: todayDate, currentDate: currentDate, newToday: newToday, calendar: calendar)
+        guard result.todayDate != todayDate else { return }
+        pageDates = result.pageDates
+        todayDate = result.todayDate
+        currentDate = result.currentDate
     }
 
     // MARK: - ページ配列の純粋ロジック（テスト対象）
@@ -771,6 +786,15 @@ struct DailyRingView: View {
             result.append(newToday)
         }
         return result
+    }
+
+    /// 日付が変わったときの、ページ配列・今日・表示中の日の新しい値（純粋関数）。
+    /// 配列は末尾への追加のみ。今日のページを見ていたなら、新しい今日へ移す。
+    static func applyDayChange(pageDates: [Date], todayDate: Date, currentDate: Date, newToday: Date, calendar: Calendar)
+        -> (pageDates: [Date], todayDate: Date, currentDate: Date) {
+        guard newToday > todayDate else { return (pageDates, todayDate, currentDate) }
+        let pages = pageDatesAfterDayChange(pageDates, newToday: newToday, calendar: calendar)
+        return (pages, newToday, currentDate == todayDate ? newToday : currentDate)
     }
 
     /// ナビゲーションタイトル。今日は「今日」、過去日は「M月d日(E)」。
