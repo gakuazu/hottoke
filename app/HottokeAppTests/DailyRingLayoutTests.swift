@@ -446,6 +446,38 @@ final class DailyRingLayoutTests: XCTestCase {
         )
     }
 
+    // MARK: - 「今日」タブの横スワイプ（ページ配列・タイトル。「今」は固定した日付を使い、実行日に依存しない）
+
+    func testTodayTabInitialPagesIncludeYesterdayOnlyWhenNavigable() {
+        let today = date(2026, 9, 19)
+        let yesterday = date(2026, 9, 18)
+        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar) { _ in true }, [yesterday, today], "末尾が今日")
+        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar) { $0 <= today && $0 >= today }, [today], "遡れないなら今日だけ")
+        // 実際の判定（isArchiveAvailable）を、固定した「今」で使う。明日は不可、保持期間内の前日は可。
+        let now = date(2026, 9, 19)
+        let navigable: (Date) -> Bool = { DailyRingLayout.isArchiveAvailable(date: $0, hasSavedRecord: false, now: now, calendar: self.calendar) }
+        XCTAssertEqual(DailyRingView.initialPageDates(today: today, calendar: calendar, isNavigable: navigable), [yesterday, today])
+    }
+
+    func testPageDatesAfterDayChangeAppendsOnly() {
+        let d = { (day: Int) in self.date(2026, 9, day) }
+        // 翌日になった: 末尾に新しい今日だけ足され、既存は変わらない。
+        XCTAssertEqual(DailyRingView.pageDatesAfterDayChange([d(17), d(18), d(19)], newToday: d(20), calendar: calendar), [d(17), d(18), d(19), d(20)])
+        // 数日空いた: 間の日も埋める。
+        XCTAssertEqual(DailyRingView.pageDatesAfterDayChange([d(18), d(19)], newToday: d(22), calendar: calendar), [d(18), d(19), d(20), d(21), d(22)])
+        // 空きが大きすぎる: 新しい今日だけ。
+        XCTAssertEqual(DailyRingView.pageDatesAfterDayChange([d(1)], newToday: d(20), calendar: calendar), [d(1), d(20)])
+        // 変化なし・すでにある・過去の日付なら何もしない。
+        XCTAssertEqual(DailyRingView.pageDatesAfterDayChange([d(18), d(19)], newToday: d(19), calendar: calendar), [d(18), d(19)])
+        XCTAssertEqual(DailyRingView.pageDatesAfterDayChange([d(18), d(19)], newToday: d(18), calendar: calendar), [d(18), d(19)])
+    }
+
+    func testTodayTabTitle() {
+        let today = date(2026, 9, 19)
+        XCTAssertEqual(DailyRingView.pageTitle(for: today, today: today), "今日")
+        XCTAssertEqual(DailyRingView.pageTitle(for: date(2026, 9, 18), today: today), "9月18日(金)")
+    }
+
     // MARK: - 画像生成（クラッシュしないこと・大きさ）
 
     func testRendererProducesImageOfRequestedSize() {

@@ -623,21 +623,62 @@ struct DailyRingPanel: View {
     }
 }
 
-/// 「今日」タブ。今日の点描リングを表示する。画面を開いたとき（別のタブから戻ったときも含む）・
-/// アプリを前面に戻したとき・更新ボタンを押したときに、最新の活動データで描き直す。
+/// 「今日」タブ。一番右のページが今日の点描リングで、左へスワイプすると前日以前（アーカイブと同じ範囲まで）を見られる。
+/// 今日のページは、画面を開いたとき（別のタブから戻ったときも含む）・アプリを前面に戻したとき・更新ボタンを押したときに、
+/// 最新の活動データで描き直す。
+///
+/// ページ配列（`pageDates`）は、`ArchiveDayDetailView`と同じく「追加のみ」で扱う
+/// （作り直すとスワイプ途中で絵が混ざる不具合が過去にあったため。詳細は`ArchiveDayDetailView`のコメント参照）。
+/// 日付が変わったときの追加も、アプリを前面に戻したタイミング（スワイプ中ではない）だけで行う。
 struct DailyRingView: View {
     @StateObject private var store = DailyRingStore()
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(ProAccess.storageKey) private var proEnabled = ProAccess.defaultEnabled
     @AppStorage(RingArtStyle.storageKey) private var styleRaw = RingArtStyle.defaultStyle.rawValue
+    /// 「スワイプで前日へ」のヒントを、一度でもスワイプしたら出さなくするための印。
+    @AppStorage("hottoke.todaySwipeHintSeen") private var swipeHintSeen = false
+    @ObservedObject private var history = DailyHistoryStore.shared
     @State private var showReport = false
+    @State private var todayDate: Date
+    @State private var currentDate: Date
+    @State private var pageDates: [Date]
+
+    private var calendar: Calendar { Calendar.current }
+
+    init() {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        _todayDate = State(initialValue: today)
+        _currentDate = State(initialValue: today)
+        _pageDates = State(initialValue: Self.initialPageDates(today: today, calendar: calendar) {
+            ArchiveDayDetailView.isDateNavigable($0, calendar: calendar)
+        })
+    }
+
+    private var isViewingToday: Bool { currentDate == todayDate }
 
     var body: some View {
         NavigationStack {
-            DailyRingPanel(store: store, proEnabled: proEnabled)
-                .navigationTitle("今日")
-                .toolbar {
-                    ToolbarItemGroup(placement: .navigationBarTrailing) {
+            VStack(spacing: 4) {
+                // 表示の有無でレイアウトが動くとスワイプ中に乱れるので、場所は常に確保して透明度だけ変える。
+                Text("← スワイプで前日へ")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                    .opacity(pageDates.count > 1 && isViewingToday && !swipeHintSeen ? 1 : 0)
+                TabView(selection: $currentDate) {
+                    ForEach(pageDates, id: \.self) { day in
+                        page(for: day)
+                            .tag(day)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+            }
+            .navigationTitle(Self.pageTitle(for: currentDate, today: todayDate))
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    if isViewingToday {
                         styleMenu
                         Button {
                             if ProAccess.isUnlocked(.report, enabled: proEnabled) {
@@ -654,27 +695,97 @@ struct DailyRingView: View {
                             Image(systemName: "arrow.clockwise")
                         }
                         .disabled(store.isLoading)
+                    } else {
+                        styleMenu
+                        Button("今日に戻る") { currentDate = todayDate }
                     }
                 }
-                .task {
-                    store.configure(proEnabled: proEnabled, styleRaw: styleRaw)
-                    await store.refresh()
+            }
+            .task {
+                store.configure(proEnabled: proEnabled, styleRaw: styleRaw)
+                await store.refresh()
+            }
+            .onChange(of: proEnabled) { _, _ in store.configure(proEnabled: proEnabled, styleRaw: styleRaw) }
+            .onChange(of: styleRaw) { _, _ in store.configure(proEnabled: proEnabled, styleRaw: styleRaw) }
+            .onChange(of: scenePhase) { _, newPhase in
+                guard newPhase == .active else { return }
+                handleDayChangeIfNeeded()
+                Task { await store.refresh() }
+            }
+            // ページめくりが確定したあとだけ、足りない隣を1枚追加する。
+            .onChange(of: currentDate) { _, newValue in
+                if newValue != todayDate { swipeHintSeen = true }
+                pageDates = ArchiveDayDetailView.extendedPageDates(pageDates, around: newValue, calendar: calendar) {
+                    ArchiveDayDetailView.isDateNavigable($0, calendar: calendar)
                 }
-                .onChange(of: proEnabled) { _, _ in store.configure(proEnabled: proEnabled, styleRaw: styleRaw) }
-                .onChange(of: styleRaw) { _, _ in store.configure(proEnabled: proEnabled, styleRaw: styleRaw) }
-                .onChange(of: scenePhase) { _, newPhase in
-                    guard newPhase == .active else { return }
-                    Task { await store.refresh() }
+            }
+            .onChange(of: history.revision) { _, _ in
+                pageDates = ArchiveDayDetailView.extendedPageDates(pageDates, around: currentDate, calendar: calendar) {
+                    ArchiveDayDetailView.isDateNavigable($0, calendar: calendar)
                 }
-                .sheet(isPresented: $showReport) {
-                    ReportView(proEnabled: proEnabled, style: store.style)
-                }
+            }
+            .sheet(isPresented: $showReport) {
+                ReportView(proEnabled: proEnabled, style: store.style)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func page(for day: Date) -> some View {
+        if day == todayDate {
+            DailyRingPanel(store: store, proEnabled: proEnabled)
+        } else {
+            ArchiveDayPage(date: day, proEnabled: proEnabled, styleRaw: styleRaw)
+        }
+    }
+
+    /// 日付が変わっていたら（深夜0時をまたいだ・翌日にアプリを前面に戻した）、新しい「今日」のページを末尾に足す。
+    /// 前面に戻った瞬間（スワイプ中ではない）だけで呼ぶ。今日のページを見ていたなら、新しい今日へ移す。
+    private func handleDayChangeIfNeeded() {
+        let newToday = calendar.startOfDay(for: Date())
+        guard newToday != todayDate else { return }
+        let wasViewingToday = isViewingToday
+        pageDates = Self.pageDatesAfterDayChange(pageDates, newToday: newToday, calendar: calendar)
+        todayDate = newToday
+        if wasViewingToday { currentDate = newToday }
+    }
+
+    // MARK: - ページ配列の純粋ロジック（テスト対象）
+
+    /// 開いたときのページ（今日と、遡れるなら前日）。昇順で、末尾が今日。
+    static func initialPageDates(today: Date, calendar: Calendar, isNavigable: (Date) -> Bool) -> [Date] {
+        ArchiveDayDetailView.extendedPageDates([today], around: today, calendar: calendar, isNavigable: isNavigable)
+    }
+
+    /// 日付が変わったとき、新しい今日までのページを末尾に追加した配列を返す（既存の要素は変えない）。
+    /// 何日か空いた場合は、間の日も埋める（多すぎる場合は新しい今日だけ）。
+    static func pageDatesAfterDayChange(_ pageDates: [Date], newToday: Date, calendar: Calendar) -> [Date] {
+        guard let last = pageDates.last, newToday > last, !pageDates.contains(newToday) else { return pageDates }
+        let gap = calendar.dateComponents([.day], from: last, to: newToday).day ?? 0
+        var result = pageDates
+        if gap >= 1 && gap <= 7 {
+            for offset in 1...gap {
+                if let d = calendar.date(byAdding: .day, value: offset, to: last) { result.append(d) }
+            }
+        } else {
+            result.append(newToday)
+        }
+        return result
+    }
+
+    /// ナビゲーションタイトル。今日は「今日」、過去日は「M月d日(E)」。
+    static func pageTitle(for date: Date, today: Date) -> String {
+        if date == today { return "今日" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "M月d日(E)"
+        formatter.locale = Locale(identifier: "ja_JP")
+        return formatter.string(from: date)
     }
 
     /// 表現スタイルの切り替え（プロ機能）。ロック中は標準の従来の点描の山に固定。
     private var styleMenu: some View {
-        Menu {
+        let current = RingArtStyle.effective(rawValue: styleRaw, proEnabled: proEnabled)
+        return Menu {
             ForEach(RingArtStyle.allCases) { style in
                 Button {
                     if ProAccess.isUnlocked(.artStyles, enabled: proEnabled) {
@@ -683,7 +794,7 @@ struct DailyRingView: View {
                         store.showLocked(.artStyles)
                     }
                 } label: {
-                    Label(style.displayName, systemImage: style == store.style ? "checkmark" : "sparkles")
+                    Label(style.displayName, systemImage: style == current ? "checkmark" : "sparkles")
                 }
             }
         } label: {

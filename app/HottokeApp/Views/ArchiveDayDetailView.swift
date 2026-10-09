@@ -108,7 +108,7 @@ struct ArchiveDayDetailView: View {
 
     /// `init`など`self`（`@ObservedObject`の`history`）がまだ使えない場面向けの、
     /// シングルトンを直接参照する版。判定内容は`isNavigable`と同じ。
-    private static func isDateNavigable(_ date: Date, calendar: Calendar) -> Bool {
+    static func isDateNavigable(_ date: Date, calendar: Calendar) -> Bool {
         let saved = DailyHistoryStore.shared.record(for: date, calendar: calendar)?.hasAnyData ?? false
         return DailyRingLayout.isArchiveAvailable(date: date, hasSavedRecord: saved, now: Date(), calendar: calendar)
     }
@@ -122,7 +122,7 @@ struct ArchiveDayDetailView: View {
 }
 
 /// `ArchiveDayDetailView`の1ページぶん（1日の「1日の輪」）。日付ごとに自分のデータ取得を持つ。
-private struct ArchiveDayPage: View {
+struct ArchiveDayPage: View {
     let proEnabled: Bool
     let styleRaw: String
     @StateObject private var store: DailyRingStore

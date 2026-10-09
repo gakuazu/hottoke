@@ -131,54 +131,43 @@ struct CalendarArchiveView: View {
             Button {
                 handleTap(date: date, isFuture: isFuture, available: available)
             } label: {
-                ZStack {
-                    if let thumbnail {
-                        Image(uiImage: thumbnail)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 44, height: 44)
-                            .clipShape(Circle())
-                            // サムネイルを少し暗くして、日付の数字が白い点に埋もれないようにする
-                            .overlay(Circle().fill(Color.black.opacity(0.28)))
-                    } else {
-                        Circle()
-                            .fill(fillColor(isFuture: isFuture, available: available))
-                            .frame(width: 44, height: 44)
+                // 丸（模様）の下に日付の数字を置く。模様には何も重ねない。
+                // 数字は全部の日で同じ位置・同じ高さなので、行の縦位置がガタつかない。
+                VStack(spacing: 2) {
+                    ZStack {
+                        if let thumbnail {
+                            Image(uiImage: thumbnail)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: Self.circleSize, height: Self.circleSize)
+                                .clipShape(Circle())
+                        } else {
+                            Circle()
+                                .fill(fillColor(isFuture: isFuture, available: available))
+                                .frame(width: Self.circleSize, height: Self.circleSize)
+                        }
+                        if isToday {
+                            Circle()
+                                .stroke(Color.accentColor, lineWidth: 2)
+                                .frame(width: Self.circleSize, height: Self.circleSize)
+                        }
                     }
-                    if isToday {
-                        Circle()
-                            .stroke(Color.accentColor, lineWidth: 2)
-                            .frame(width: 44, height: 44)
-                    }
-                    dayNumber(calendar.component(.day, from: date), hasThumbnail: thumbnail != nil, isFuture: isFuture, isToday: isToday)
+                    Text("\(calendar.component(.day, from: date))")
+                        .font(.system(size: 11, weight: isToday ? .bold : .regular, design: .rounded))
+                        .foregroundStyle(isFuture ? Color.secondary.opacity(0.5) : (isToday ? Color.accentColor : Color.primary))
+                        .frame(height: 14)
                 }
             }
+            .buttonStyle(.plain)
             .disabled(isFuture)
             .frame(maxWidth: .infinity)
         } else {
-            Color.clear.frame(width: 44, height: 44).frame(maxWidth: .infinity)
+            Color.clear.frame(width: Self.circleSize, height: Self.circleSize + 16).frame(maxWidth: .infinity)
         }
     }
 
-    /// 日付の数字。サムネイルがあるときは、白い点と重なっても読めるよう、暗い半透明のカプセルの上に
-    /// 置いてセルの下寄りに出す。サムネイルがない日（データなし・未来）は、丸の色の上にそのまま出す。
-    /// 今日は数字をアクセント色にして目立たせる。ライト/ダークどちらでも、カプセルは常に暗色・数字は明色なので読める。
-    @ViewBuilder
-    private func dayNumber(_ day: Int, hasThumbnail: Bool, isFuture: Bool, isToday: Bool) -> some View {
-        if hasThumbnail {
-            Text("\(day)")
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(isToday ? Color.yellow : Color.white)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(Capsule().fill(Color.black.opacity(0.72)))
-                .offset(y: 13)
-        } else {
-            Text("\(day)")
-                .font(.footnote.weight(isToday ? .bold : .regular))
-                .foregroundStyle(isFuture ? Color.secondary.opacity(0.5) : (isToday ? Color.accentColor : Color.primary))
-        }
-    }
+    /// カレンダーの丸の直径。7列がiPhone SE（幅375pt）でも収まる大きさ（1列あたり約48pt）にしている。
+    private static let circleSize: CGFloat = 46
 
     /// 表示中の月の、保存済みの記録。
     private var monthRecords: [DailyRingSlices] {
