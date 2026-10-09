@@ -109,11 +109,14 @@ final class LocationDiaryTests: XCTestCase {
 
     // MARK: - LocationVisitStore
 
+    /// 保持期間（14日）の判定を実行日に左右されないよう、テスト用の「今」を固定する
+    private var fixedNow: Date { date(20, 12) }
+
     func testStoreSavesAndFiltersSamplesByDay() {
         let store = LocationVisitStore(directory: tempDirectory())
-        store.add(sample(18, 9, lat: 35.65, lon: 139.70))
-        store.add(sample(18, 20, lat: 35.68, lon: 139.76))
-        store.add(sample(19, 9, lat: 35.65, lon: 139.70))
+        store.add(sample(18, 9, lat: 35.65, lon: 139.70), now: fixedNow, calendar: calendar)
+        store.add(sample(18, 20, lat: 35.68, lon: 139.76), now: fixedNow, calendar: calendar)
+        store.add(sample(19, 9, lat: 35.65, lon: 139.70), now: fixedNow, calendar: calendar)
 
         XCTAssertEqual(store.samples(on: date(18), calendar: calendar).count, 2)
         XCTAssertEqual(store.samples(on: date(19), calendar: calendar).count, 1)
@@ -131,7 +134,7 @@ final class LocationDiaryTests: XCTestCase {
 
     func testRemoveAllClearsEverything() {
         let store = LocationVisitStore(directory: tempDirectory())
-        store.add(sample(18, 9, lat: 35.65, lon: 139.70))
+        store.add(sample(18, 9, lat: 35.65, lon: 139.70), now: fixedNow, calendar: calendar)
         XCTAssertFalse(store.samples.isEmpty)
         store.removeAll()
         XCTAssertTrue(store.samples.isEmpty)
@@ -140,7 +143,7 @@ final class LocationDiaryTests: XCTestCase {
     func testStorePersistsAcrossInstancesAtSameDirectory() {
         let dir = tempDirectory()
         let store = LocationVisitStore(directory: dir)
-        store.add(sample(18, 9, lat: 35.65, lon: 139.70))
+        store.add(sample(18, 9, lat: 35.65, lon: 139.70), now: fixedNow, calendar: calendar)
 
         let reopened = LocationVisitStore(directory: dir)
         XCTAssertEqual(reopened.samples.count, 1)
