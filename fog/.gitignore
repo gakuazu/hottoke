@@ -1,0 +1,4 @@
+# project.yml から CI(fog-build.yml) が毎回生成する
+Fog.xcodeproj/
+Fog/Info.plist
+build/

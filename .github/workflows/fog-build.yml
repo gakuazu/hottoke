@@ -1,0 +1,92 @@
+name: Fog Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "fog/**"
+      - ".github/workflows/fog-build.yml"
+  pull_request:
+    paths:
+      - "fog/**"
+      - ".github/workflows/fog-build.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: fog
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: Install XcodeGen and generate project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build for iOS Simulator (compile sanity check)
+        run: |
+          xcodebuild build \
+            -project Fog.xcodeproj \
+            -scheme Fog \
+            -destination "generic/platform=iOS Simulator" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Pick an available iPhone simulator
+        id: pick_sim
+        run: |
+          DEVICE=$(xcrun simctl list devices available 2>/dev/null \
+            | grep -E '^[[:space:]]+iPhone' \
+            | head -n 1 \
+            | awk -F' \\(' '{print $1}' \
+            | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')
+          if [ -z "$DEVICE" ]; then
+            DEVICE="iPhone 15"
+          fi
+          echo "device=$DEVICE" >> "$GITHUB_OUTPUT"
+
+      - name: Run unit tests on Simulator
+        run: |
+          xcodebuild test \
+            -project Fog.xcodeproj \
+            -scheme Fog \
+            -destination "platform=iOS Simulator,name=${{ steps.pick_sim.outputs.device }}" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build unsigned .app for iOS device (for Sideloadly)
+        run: |
+          xcodebuild build \
+            -project Fog.xcodeproj \
+            -scheme Fog \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            DEVELOPMENT_TEAM=""
+
+      - name: Package unsigned IPA
+        run: |
+          set -e
+          APP_PATH="build/Build/Products/Release-iphoneos/Fog.app"
+          test -d "$APP_PATH"
+          mkdir -p ipa_root/Payload
+          cp -R "$APP_PATH" ipa_root/Payload/
+          cd ipa_root
+          zip -qr ../Fog-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fog-unsigned-ipa
+          path: fog/Fog-unsigned.ipa
+          retention-days: 14

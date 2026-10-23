@@ -1,0 +1,61 @@
+name: Fog
+options:
+  bundleIdPrefix: com.gakuazu.hottoke
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    GENERATE_INFOPLIST_FILE: NO
+    TARGETED_DEVICE_FAMILY: "1"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+targets:
+  Fog:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Fog
+    info:
+      path: Fog/Info.plist
+      properties:
+        CFBundleDisplayName: くもり窓
+        NSMicrophoneUsageDescription: "息を吹きかけたことを検知して画面を曇らせるために、マイクの音量を使います。音は録音も保存も送信もせず、その場で音の大きさを調べるだけです。"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIRequiresFullScreen: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gakuazu.hottoke.fog
+        PRODUCT_NAME: Fog
+  FogTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: FogTests
+    dependencies:
+      - target: Fog
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.gakuazu.hottoke.fogtests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Fog:
+    build:
+      targets:
+        Fog: all
+        FogTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - FogTests
+    archive:
+      config: Release
